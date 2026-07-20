@@ -325,7 +325,7 @@ function mkRuleIO(type,args,N,names){
       case 'atLeastOne': if(a==='out'&&b==='out')return 'bad'; if(a==='in'||b==='in')return 'ok'; return 'pend';
       case 'biconditional': if(a&&b)return (a===b?'ok':'bad'); return 'pend';
       case 'mustOut': return a==='out'?'ok':a==='in'?'bad':'pend';
-      case 'countExact': if(ins>k)return 'bad'; if(N-outs<k)return 'bad'; if(unk===0)return ins===k?'ok':'bad'; return 'pend';
+      case 'countExact': if(ins>k)return 'bad'; if(ins+unk<k)return 'bad'; if(ins===k)return 'ok'; return 'pend';
       case 'countAtLeast': if(ins>=k)return 'ok'; if(ins+unk<k)return 'bad'; return 'pend';
       case 'countAtMost': if(ins>k)return 'bad'; if(ins+unk<=k)return 'ok'; return 'pend';
     }
@@ -426,7 +426,7 @@ function mkRuleGroup(type,args,N,names,meta,nG){
       case 'diffGroup':{const a=s[args[0]],b=s[args[1]];return (a&&b)?(a!==b?'ok':'bad'):'pend';}
       case 'notInGroup':{const a=s[args[0]];return a?(a==='g'+args[1]?'bad':'ok'):'pend';}
       case 'inGroup':{const a=s[args[0]];return a?(a==='g'+args[1]?'ok':'bad'):'pend';}
-      case 'sizeExact':{const k=args[1],inG=cg(args[0]);if(inG>k)return 'bad';if(inG+unk<k)return 'bad';if(unk===0)return inG===k?'ok':'bad';return 'pend';}
+      case 'sizeExact':{const k=args[1],inG=cg(args[0]);if(inG>k)return 'bad';if(inG+unk<k)return 'bad';if(inG===k)return 'ok';return 'pend';}
       case 'sizeAtLeast':{const k=args[1],inG=cg(args[0]);if(inG>=k)return 'ok';if(inG+unk<k)return 'bad';return 'pend';}
       case 'sizeAtMost':{const k=args[1],inG=cg(args[0]);if(inG>k)return 'bad';if(inG+unk<=k)return 'ok';return 'pend';}
       case 'condGroup':{const a=s[args[0]],b=s[args[2]],gi='g'+args[1],gj='g'+args[3];
