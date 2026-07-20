@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deduction — Logic Games</title>
+<style>
+:root{
+  --bg:#0b0b0f; --card:#16161d; --card2:#1c1c25; --line:#2a2a35; --text:#ececf1;
+  --dim:#9a9aa6; --green:#30d158; --red:#ff453a; --amber:#ffd60a; --blue:#0a84ff; --mono:ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:560px;margin:0 auto;padding:18px 16px 60px}
+h1{font-size:1.5rem;font-weight:700;letter-spacing:-.02em;margin:0 0 2px}
+.sub{color:var(--dim);font-size:.82rem;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.card h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 10px;font-weight:700}
+.card h2 .n{text-transform:none;letter-spacing:0;color:var(--dim);font-weight:400}
+.setup{font-size:.92rem;line-height:1.5}.setup b{color:#fff}
+
+.controls{display:flex;gap:8px;margin-bottom:14px;align-items:center}
+select{flex:1;background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:11px;padding:10px;font-size:.85rem}
+.controls button{flex:1}
+
+.stations{display:grid;gap:6px;margin:4px 0 2px}
+.station{aspect-ratio:1/1.15;border-radius:12px;background:var(--card2);border:1.5px dashed var(--line);
+  display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;transition:.12s}
+.station.armed{border-color:var(--blue);box-shadow:0 0 0 2px rgba(10,132,255,.3) inset}
+.station.dragover{border-color:var(--blue);background:#18324e;box-shadow:0 0 0 2px rgba(10,132,255,.55) inset}
+.tile{touch-action:none}
+.tile.dragging{opacity:.3}
+.tray.dragover{outline:2px dashed var(--blue);outline-offset:4px;border-radius:12px}
+.station .num{position:absolute;top:3px;left:0;right:0;text-align:center;font-size:.55rem;color:var(--dim);font-family:var(--mono)}
+.tile{width:100%;height:100%;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:1.25rem;color:#0b0b0f;cursor:pointer;user-select:none;transition:transform .1s}
+.tile:active{transform:scale(.94)}
+.tray{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;min-height:50px}
+.tray .slot{width:44px;height:44px}
+.tray .tile{border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.tile.sel{outline:3px solid #fff;outline-offset:2px}
+
+.rule{display:flex;align-items:flex-start;gap:10px;padding:7px 0;font-size:.88rem;line-height:1.35}
+.rule+.rule{border-top:1px solid var(--line)}
+.dot{flex:none;width:18px;height:18px;border-radius:50%;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;background:#33333f;color:var(--dim)}
+.dot.ok{background:rgba(48,209,88,.18);color:var(--green)}.dot.bad{background:rgba(255,69,58,.18);color:var(--red)}
+.rule.bad .rtext{color:#ffb3ae}
+.bar{display:flex;gap:10px;margin-top:6px}
+button{flex:1;background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:11px;font-size:.9rem;font-weight:600;cursor:pointer}
+button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+button:active{transform:scale(.98)}
+.banner{display:none;background:linear-gradient(135deg,#0a84ff,#30d158);border-radius:14px;padding:14px 16px;font-weight:700;text-align:center;margin-bottom:14px;color:#031;animation:pop .3s}
+.banner.show{display:block}
+@keyframes pop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+.q{margin-bottom:16px}.q .stem{font-size:.9rem;font-weight:600;margin-bottom:8px;line-height:1.4}
+.opt{display:block;width:100%;text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:7px;font-size:.86rem;cursor:pointer;color:var(--text)}
+.opt.correct{background:rgba(48,209,88,.16);border-color:var(--green)}.opt.wrong{background:rgba(255,69,58,.16);border-color:var(--red)}
+.expl{font-size:.8rem;color:var(--dim);margin-top:4px;display:none;line-height:1.45}.expl.show{display:block}
+.foot{color:var(--dim);font-size:.72rem;text-align:center;margin-top:26px;line-height:1.5}
+.pill{display:inline-block;font-size:.68rem;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin-left:6px}
+</style></head>
+<body><div class="wrap">
+  <h1>Deduction</h1>
+  <div class="sub">Endless logic-games puzzles · classic LSAT “Analytical Reasoning” style</div>
+
+  <div class="controls">
+    <select id="diff">
+      <option value="easy">Easy · 5</option>
+      <option value="medium" selected>Medium · 6</option>
+      <option value="hard">Hard · 7</option>
+    </select>
+    <button class="primary" onclick="newGame()">New Game ↻</button>
+  </div>
+
+  <div class="banner" id="banner">✓ Solved — every constraint satisfied!</div>
+
+  <div class="card">
+    <h2>The Setup <span class="pill" id="solpill"></span></h2>
+    <div class="setup" id="setup"></div>
+  </div>
+
+  <div class="card">
+    <h2>The Board <span class="n" id="tapHint">— tap an item, then a station</span></h2>
+    <div class="stations" id="stations"></div>
+    <div class="tray" id="tray"></div>
+    <div class="bar"><button onclick="reset()">Reset</button><button class="primary" onclick="check()">Check</button></div>
+  </div>
+
+  <div class="card"><h2>The Rules</h2><div id="rules"></div></div>
+  <div class="card"><h2>Deductions <span class="n">— probe the solution space</span></h2><div id="quiz"></div></div>
+
+  <div class="foot">Original puzzles generated in the LSAT logic-games style (real LSAC games are copyrighted).<br>
+  Each board is brute-force-verified solvable; questions are derived from the actual solution set.</div>
+</div>
+<script>
+/* ---------- themes ---------- (items must have distinct initials) */
+const THEMES = [
+  {slot:'station', verb:'poured at', story:n=>`A café pours ${n} single-origin coffees`,
+   items:[['B','Brazil'],['C','Colombia'],['E','Ethiopia'],['G','Guatemala'],['K','Kenya'],['P','Peru'],['S','Sumatra']]},
+  {slot:'lane', verb:'assigned to', story:n=>`${n} sprinters are assigned racing lanes`,
+   items:[['A','Ana'],['B','Ben'],['C','Cara'],['D','Devi'],['E','Eli'],['F','Faye'],['G','Gus']]},
+  {slot:'slot', verb:'booked into', story:n=>`${n} bands are booked into festival time slots`,
+   items:[['H','Halo'],['J','Judo'],['K','Krill'],['L','Lyra'],['M','Muse'],['N','Nova'],['O','Onyx']]},
+  {slot:'position', verb:'hung at', story:n=>`${n} paintings are hung in a row`,
+   items:[['R','Reef'],['S','Storm'],['T','Tide'],['U','Umbra'],['V','Vale'],['W','Wren'],['Y','Yolk']]},
+];
+const PALETTE={B:'#ffb340',C:'#5ac8fa',E:'#ff6482',G:'#67e88b',K:'#bf9dff',P:'#ffd60a',S:'#ff9f0a',
+  A:'#ff6482',D:'#5ac8fa',F:'#67e88b',H:'#ffb340',J:'#bf9dff',L:'#ffd60a',M:'#5ac8fa',N:'#67e88b',O:'#ff9f0a',
+  R:'#ff6482',T:'#5ac8fa',U:'#bf9dff',V:'#67e88b',W:'#ffd60a',Y:'#ff9f0a'};
+const rnd=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+
+/* ---------- rule + statement engine ---------- */
+function mkRule(type,args,N,names,slot){
+  const nm=x=>names[x];
+  const T={
+    before:([X,Y])=>({t:p=>p[X]<p[Y], txt:`${nm(X)} is somewhere before ${nm(Y)}.`}),
+    immBefore:([X,Y])=>({t:p=>p[Y]===p[X]+1, txt:`${nm(X)} is immediately before ${nm(Y)}.`}),
+    atPos:([X,k])=>({t:p=>p[X]===k, txt:`${nm(X)} is at ${slot} ${k}.`}),
+    notPos:([X,k])=>({t:p=>p[X]!==k, txt:`${nm(X)} is not at ${slot} ${k}.`}),
+    atEnd:([X])=>({t:p=>p[X]===1||p[X]===N, txt:`${nm(X)} is at an end (${slot} 1 or ${N}).`}),
+    adjacent:([X,Y])=>({t:p=>Math.abs(p[X]-p[Y])===1, txt:`${nm(X)} is next to ${nm(Y)}.`}),
+    notAdjacent:([X,Y])=>({t:p=>Math.abs(p[X]-p[Y])!==1, txt:`${nm(X)} is not next to ${nm(Y)}.`}),
+  };
+  const base=T[type](args);
+  const key=type+':'+args.join(',');
+  const partial=(pos)=>{ // pos: letter->1..N or null
+    const a=args, X=a[0], Y=a[1], k=a[1];
+    const px=pos[X], py=pos[Y];
+    switch(type){
+      case 'before': return (px&&py)?(px<py?'ok':'bad'):'pend';
+      case 'immBefore': if(px===N)return 'bad'; if(py===1)return 'bad'; return (px&&py)?(py===px+1?'ok':'bad'):'pend';
+      case 'atPos': return px?(px===k?'ok':'bad'):'pend';
+      case 'notPos': return px?(px===k?'bad':'ok'):'pend';
+      case 'atEnd': return px?((px===1||px===N)?'ok':'bad'):'pend';
+      case 'adjacent': return (px&&py)?(Math.abs(px-py)===1?'ok':'bad'):'pend';
+      case 'notAdjacent': return (px&&py)?(Math.abs(px-py)===1?'bad':'ok'):'pend';
+    }
+  };
+  return {type,args,key,text:base.txt,test:base.t,partial};
+}
+
+function perms(arr){ // all permutations of letters
+  if(arr.length<=1) return [arr.slice()];
+  const out=[];
+  arr.forEach((x,i)=>{const rest=arr.slice(0,i).concat(arr.slice(i+1));
+    perms(rest).forEach(r=>out.push([x,...r]));});
+  return out;
+}
+const posOf=seq=>{const p={};seq.forEach((l,i)=>p[l]=i+1);return p;};
+
+/* ---------- generator ---------- */
+function candidatePool(letters,N,names,slot){
+  const pool=[];
+  for(const X of letters){
+    pool.push(mkRule('atEnd',[X],N,names,slot));
+    // NOTE: 'atPos' (exact placement) is intentionally excluded from generated RULES —
+    // it gives away an answer instead of forcing deduction (LSAT uses it rarely).
+    // 'notPos' (eliminative) and 'atEnd' (two-option) stay; 'atPos' still used in quiz statements.
+    for(let k=1;k<=N;k++){ pool.push(mkRule('notPos',[X,k],N,names,slot)); }
+    for(const Y of letters){ if(X===Y) continue;
+      pool.push(mkRule('before',[X,Y],N,names,slot));
+      pool.push(mkRule('immBefore',[X,Y],N,names,slot));
+      if(X<Y){ pool.push(mkRule('adjacent',[X,Y],N,names,slot)); pool.push(mkRule('notAdjacent',[X,Y],N,names,slot)); }
+    }
+  }
+  return pool;
+}
+function generate(diff){
+  const N={easy:5,medium:6,hard:7}[diff];
+  for(let attempt=0;attempt<120;attempt++){
+    const theme=rnd(THEMES);
+    const chosen=shuffle(theme.items.slice()).slice(0,N);
+    const letters=chosen.map(x=>x[0]); const names={}; chosen.forEach(x=>names[x[0]]=x[1]);
+    let sols=perms(letters).map(posOf); const rules=[];
+    const pool=shuffle(candidatePool(letters,N,names,theme.slot));
+    for(const cand of pool){
+      if(rules.length>=9 || sols.length===1) break;   // keep going until the answer is UNIQUE
+      const next=sols.filter(P=>cand.test(P));
+      if(next.length===0) continue;              // never kill the puzzle
+      if(next.length===sols.length) continue;    // no effect (redundant rule)
+      rules.push(cand); sols=next;
+    }
+    if(sols.length===1 && rules.length>=3){      // exactly one solution, non-trivial rule set
+      return {N,theme,letters,names,rules,sols};
+    }
+  }
+  return null; // (retry loop virtually always succeeds)
+}
+
+/* ---------- deduction quiz from the solution set ---------- */
+function statementPool(letters,N,names,slot){
+  const s=[]; const push=(type,args)=>s.push(mkRule(type,args,N,names,slot));
+  for(const X of letters){ push('atEnd',[X]); for(let k=1;k<=N;k++) push('atPos',[X,k]);
+    for(const Y of letters){ if(X===Y)continue; push('before',[X,Y]); if(X<Y) push('adjacent',[X,Y]); } }
+  return s;
+}
+function classify(st,sols){ const c=sols.filter(P=>st.test(P)).length;
+  return c===0?'never':c===sols.length?'always':'some'; }
+function pick(arr,n,exclude){ const pool=arr.filter(x=>!exclude.includes(x)); shuffle(pool); return pool.slice(0,n); }
+function buildQuiz(G){
+  const {sols,letters,N,names,theme}=G; const pool=statementPool(letters,N,names,theme.slot);
+  // dedupe by key
+  const seen={}; const uniq=pool.filter(s=>seen[s.key]?false:(seen[s.key]=1));
+  const always=[],never=[],some=[];
+  uniq.forEach(s=>{const c=classify(s,sols); (c==='always'?always:c==='never'?never:some).push(s);});
+  const qs=[];
+  // distractor pools: classic multi-solution uses "could be true"; a unique board
+  // falls back to the opposite class (still valid, just plainly wrong options).
+  const mustD = some.length>=3 ? some : never;
+  const cantD = some.length>=3 ? some : always;
+  // Q: must be true
+  if(always.length&&mustD.length>=3){ const ans=rnd(always); const d=pick(mustD,3,[ans]);
+    qs.push(makeQ('Which one of the following must be true?',ans,d,
+      `${ans.text.replace(/\.$/,'')} is forced by the rules.`)); }
+  // Q: a second must-be-true (unique boards have no conditional Q, so fill out here)
+  if(some.length===0 && always.length>1 && never.length>=3){
+    const used=qs.length?qs[0].opts[qs[0].ansIdx]:null;
+    const pool2=always.filter(a=>a!==used); if(pool2.length){ const ans=rnd(pool2); const d=pick(never,3,[ans]);
+      qs.push(makeQ('Which one of the following must be true?',ans,d,
+        `${ans.text.replace(/\.$/,'')} follows from the constraints.`)); } }
+  // Q: cannot be true
+  if(never.length&&cantD.length>=3){ const ans=rnd(never); const d=pick(cantD,3,[ans]);
+    qs.push(makeQ('Which one of the following CANNOT be true?',ans,d,
+      `No valid arrangement allows ${lower(ans.text)}`)); }
+  // Q: conditional (if X then must)
+  for(const cond of shuffle(some.slice())){
+    const sub=sols.filter(P=>cond.test(P)); if(sub.length<1||sub.length===sols.length) continue;
+    const subAlways=uniq.filter(s=>s.test&&sub.every(P=>s.test(P))&&!sols.every(P=>s.test(P)));
+    const subSome=uniq.filter(s=>{const c=sub.filter(P=>s.test(P)).length;return c>0&&c<sub.length;});
+    if(subAlways.length&&subSome.length>=3){ const ans=rnd(subAlways); const d=pick(subSome,3,[]);
+      qs.push(makeQ(`If ${lower(cond.text)} then which one of the following must be true?`,ans,d,
+        `Given that condition, only certain lineups remain — and all of them satisfy “${ans.text.replace(/\.$/,'')}.”`));
+      break; }
+  }
+  return qs;
+}
+function lower(t){return t.charAt(0).toLowerCase()+t.slice(1);}
+function makeQ(stem,ans,distractors,why){
+  const opts=shuffle([ans,...distractors]); return {stem,opts,ansIdx:opts.indexOf(ans),why};
+}
+
+/* ---------- state + render ---------- */
+let G=null, placement=[], sel=null;
+function newGame(){ G=generate(document.getElementById('diff').value);
+  if(!G){ alert('Generator hiccup — tap New Game again.'); return; }
+  placement=Array(G.N).fill(null); sel=null;
+  document.getElementById('setup').innerHTML =
+    `${G.theme.story(G.N)} — one at each of ${G.N} ${G.theme.slot}s numbered <b>1–${G.N}</b>, left to right. `+
+    `Place all ${G.N} so every rule holds. Items: `+G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+  document.getElementById('solpill').textContent = G.sols.length===1?'Unique solution':(G.sols.length+' solutions');
+  document.getElementById('tapHint').textContent = defaultHint();
+  document.getElementById('banner').classList.remove('show');
+  document.getElementById('stations').style.gridTemplateColumns=`repeat(${G.N},1fr)`;
+  G.quiz=buildQuiz(G);
+  render(); renderQuiz();
+}
+function curPos(){const p={};G.letters.forEach(l=>p[l]=null);placement.forEach((l,i)=>{if(l)p[l]=i+1;});return p;}
+// sel = null | {letter, at}  where at = station index (0-based) or -1 for the tray.
+// Tap-to-move and drag-and-drop share one mover: applyMove(from,to).
+let dragData=null;
+function wireDrag(el,letter,at){   // desktop drag; touch has no HTML5 DnD → falls back to tap
+  el.draggable=true;
+  el.ondragstart=e=>{ dragData={letter,at}; e.dataTransfer.setData('text/plain',letter); e.dataTransfer.effectAllowed='move'; el.classList.add('dragging'); };
+  el.ondragend=()=>{ dragData=null; document.querySelectorAll('.dragover').forEach(x=>x.classList.remove('dragover')); render(); };
+}
+function dropTarget(el,to){         // to = station index | 'tray'
+  el.ondragover=e=>{ if(dragData && !(to==='tray'&&dragData.at<0)){ e.preventDefault(); e.dataTransfer.dropEffect='move'; el.classList.add('dragover'); } };
+  el.ondragleave=()=>el.classList.remove('dragover');
+  el.ondrop=e=>{ e.preventDefault(); el.classList.remove('dragover'); if(dragData){ const d=dragData; dragData=null; applyMove(d,to); } };
+}
+function render(){
+  const st=document.getElementById('stations');st.innerHTML='';
+  for(let i=0;i<G.N;i++){
+    const occupied=placement[i]; const isSelHere = sel && sel.at===i;
+    const cell=document.createElement('div');
+    cell.className='station'+((sel && !isSelHere)?' armed':'');   // every other cell is a drop/swap target
+    cell.innerHTML='<span class="num">'+(i+1)+'</span>';
+    if(occupied){ const t=tile(occupied,isSelHere); wireDrag(t,occupied,i); cell.appendChild(t); }
+    cell.onclick=()=>clickCell(i);
+    dropTarget(cell,i);
+    st.appendChild(cell);
+  }
+  const tray=document.getElementById('tray');tray.innerHTML='';
+  G.letters.forEach(l=>{const slot=document.createElement('div');slot.className='slot';
+    if(!placement.includes(l)){ const selc = sel && sel.at===-1 && sel.letter===l;
+      const t=tile(l,selc); wireDrag(t,l,-1);
+      t.onclick=()=>{ sel = selc?null:{letter:l,at:-1}; render(); }; slot.appendChild(t); }
+    tray.appendChild(slot);});
+  dropTarget(tray,'tray');   // drag a placed piece here to remove it
+  renderRules();
+}
+function applyMove(from,to){
+  if(to==='tray'){ if(from.at>=0) placement[from.at]=null; }
+  else if(from.at!==to){ const occ=placement[to]; if(from.at>=0) placement[from.at]=occ; placement[to]=from.letter; }
+  sel=null; render(); banner(solved());
+}
+function clickCell(i){
+  const occupied=placement[i];
+  if(!sel){ if(occupied){ sel={letter:occupied,at:i}; render(); } return; }  // pick up a placed piece
+  if(sel.at===i){ applyMove(sel,'tray'); return; }                           // click its own cell → back to tray
+  applyMove(sel,i);                                                          // move / swap
+}
+function tile(l,selc){const t=document.createElement('div');t.className='tile'+(selc?' sel':'');
+  t.style.background=PALETTE[l]||'#88c'; t.textContent=l; t.title=G.names[l]; return t;}
+function renderRules(){const pos=curPos();const box=document.getElementById('rules');box.innerHTML='';
+  G.rules.forEach(r=>{const s=r.partial(pos);const row=document.createElement('div');row.className='rule'+(s==='bad'?' bad':'');
+    row.innerHTML='<span class="dot '+(s==='ok'?'ok':s==='bad'?'bad':'')+'">'+(s==='ok'?'✓':s==='bad'?'✕':'')+'</span><span class="rtext">'+r.text+'</span>';
+    box.appendChild(row);});}
+function solved(){ if(placement.includes(null))return false; const P=curPos(); return G.rules.every(r=>r.test(P)); }
+function banner(v){document.getElementById('banner').classList.toggle('show',v);}
+function check(){ if(placement.includes(null)){hint('Place all '+G.N+' items first.');return;}
+  if(solved())banner(true); else {banner(false);const pos=curPos();const b=G.rules.filter(r=>r.partial(pos)==='bad').length;
+    hint(b+' rule'+(b!==1?'s':'')+' still broken — see red.');}}
+function defaultHint(){return '— tap an item, then a '+(G?G.theme.slot:'slot');}
+function hint(m){const h=document.getElementById('tapHint');h.textContent='— '+m;
+  setTimeout(()=>h.textContent=defaultHint(),2600);}
+function reset(){placement=Array(G.N).fill(null);sel=null;banner(false);render();}
+function renderQuiz(){const box=document.getElementById('quiz');box.innerHTML='';
+  if(!G.quiz.length){box.innerHTML='<div class="foot" style="margin:0;text-align:left">This board’s solution set was too tight for clean questions — tap New Game for one with deductions.</div>';return;}
+  G.quiz.forEach((q,qi)=>{const d=document.createElement('div');d.className='q';
+    d.innerHTML='<div class="stem">'+(qi+1)+'. '+q.stem+'</div>';
+    q.opts.forEach((o,oi)=>{const b=document.createElement('button');b.className='opt';b.textContent=String.fromCharCode(65+oi)+') '+o.text;
+      b.onclick=()=>{d.querySelectorAll('.opt').forEach(x=>x.style.pointerEvents='none');
+        b.classList.add(oi===q.ansIdx?'correct':'wrong');
+        if(oi!==q.ansIdx)d.querySelectorAll('.opt')[q.ansIdx].classList.add('correct');
+        d.querySelector('.expl').classList.add('show');};
+      d.appendChild(b);});
+    const e=document.createElement('div');e.className='expl';e.textContent='➛ '+q.why;d.appendChild(e);
+    box.appendChild(d);});
+}
+newGame();
+</script></body></html>
