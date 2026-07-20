@@ -555,11 +555,11 @@ function makeQ(stem,ans,distractors,why){
 }
 
 /* ---------- state + render ---------- */
-let G=null, placement=[], assign={}, sel=null;
+let G=null, placement=[], assign={}, sel=null, revealed=false;   // revealed: rule pass/fail only shown after Check
 function newGame(){ const diff=document.getElementById('diff').value; const fam=pickFamily(diff);
   G = fam==='inout' ? generateInOut(diff) : fam==='grouping' ? generateGroup(diff) : generate(diff);
   if(!G){ alert('Generator hiccup — tap New Game again.'); return; }
-  G.family=fam; sel=null;
+  G.family=fam; sel=null; revealed=false;
   if(fam==='sequencing'){ placement=Array(G.N).fill(null);
     document.getElementById('setup').innerHTML =
       `${G.theme.story(G.N)} — one at each of ${G.N} ${G.theme.slot}s numbered <b>1–${G.N}</b>, left to right. `+
@@ -645,10 +645,10 @@ function renderBins(){
 }
 function clickZone(zone){ if(sel){ if(sel.at===zone){sel=null;render();return;} applyMove(sel,zone); } }
 function applyMove(from,to){
-  if(G.family!=='sequencing'){ if(to==='tray') delete assign[from.letter]; else assign[from.letter]=to; sel=null; render(); banner(solved()); return; }
+  if(G.family!=='sequencing'){ if(to==='tray') delete assign[from.letter]; else assign[from.letter]=to; sel=null; revealed=false; banner(false); render(); return; }
   if(to==='tray'){ if(from.at>=0) placement[from.at]=null; }
   else if(from.at!==to){ const occ=placement[to]; if(from.at>=0) placement[from.at]=occ; placement[to]=from.letter; }
-  sel=null; render(); banner(solved());
+  sel=null; revealed=false; banner(false); render();
 }
 function clickCell(i){
   const occupied=placement[i];
@@ -659,12 +659,15 @@ function clickCell(i){
 function tile(l,selc,fixed){const t=document.createElement('div');t.className='tile'+(selc?' sel':'')+(fixed?' fixed':'');
   t.style.background=(G.palette&&G.palette[l])||'#88c'; t.textContent=l; t.title=G.names[l]; return t;}
 function renderRules(){const S=curState();const box=document.getElementById('rules');box.innerHTML='';
-  G.rules.forEach(r=>{const s=r.partial(S);const row=document.createElement('div');row.className='rule'+(s==='bad'?' bad':'');
+  G.rules.forEach(r=>{const s=revealed?r.partial(S):'pend';const row=document.createElement('div');row.className='rule'+(s==='bad'?' bad':'');
     row.innerHTML='<span class="dot '+(s==='ok'?'ok':s==='bad'?'bad':'')+'">'+(s==='ok'?'✓':s==='bad'?'✕':'')+'</span><span class="rtext">'+r.text+'</span>';
     box.appendChild(row);});}
 function solved(){ if(!allPlaced())return false; const S=curState(); return G.rules.every(r=>r.test(S)); }
 function banner(v){document.getElementById('banner').classList.toggle('show',v);}
-function check(){ if(!allPlaced()){hint('Place all '+G.N+' items first.');return;}
+function check(){ if(!allPlaced()){ revealed=false; banner(false); render();
+    const left=G.family==='sequencing'?placement.filter(x=>!x).length:G.letters.filter(l=>!assign[l]).length;
+    hint('Place all '+G.N+' first — '+left+' to go.'); return; }
+  revealed=true; render();   // reveal per-rule pass/fail now
   if(solved())banner(true); else {banner(false);const S=curState();const b=G.rules.filter(r=>r.partial(S)==='bad').length;
     hint(b+' rule'+(b!==1?'s':'')+' still broken — see red.');}}
 function defaultHint(){ if(!G)return '— tap an item, then a spot';
@@ -673,7 +676,7 @@ function defaultHint(){ if(!G)return '— tap an item, then a spot';
   return '— tap an item, then a '+G.meta.unit; }
 function hint(m){const h=document.getElementById('tapHint');h.textContent='— '+m;
   setTimeout(()=>h.textContent=defaultHint(),2600);}
-function reset(){ if(G.family==='sequencing')placement=Array(G.N).fill(null); else assign={}; sel=null;banner(false);render();}
+function reset(){ if(G.family==='sequencing')placement=Array(G.N).fill(null); else assign={}; sel=null;revealed=false;banner(false);render();}
 function renderQuiz(){const box=document.getElementById('quiz');box.innerHTML='';
   if(!G.quiz.length){box.innerHTML='<div class="foot" style="margin:0;text-align:left">This board’s solution set was too tight for clean questions — tap New Game for one with deductions.</div>';return;}
   G.quiz.forEach((q,qi)=>{const d=document.createElement('div');d.className='q';
