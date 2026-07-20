@@ -49,6 +49,15 @@ select{flex:1;background:var(--card2);color:var(--text);border:1px solid var(--l
 .bin h3 .c{font-family:var(--mono);color:var(--text);font-size:.72rem}
 .bin .items{display:flex;flex-wrap:wrap;gap:8px;min-height:44px}
 .pool{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;min-height:44px}
+/* matching 2-D grid */
+.mrow{display:grid;grid-template-columns:1.05fr 1fr 1fr;gap:8px;align-items:stretch;margin-bottom:8px}
+.mhead{margin-bottom:2px}
+.mhead .mcolhead{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:700;text-align:center;padding:2px 0}
+.ment{display:flex;align-items:center;font-weight:700;font-size:.9rem;padding-left:2px}
+.mcell{background:var(--card2);border:1.5px solid var(--line);border-radius:11px;min-height:46px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;cursor:pointer;transition:.1s;text-align:center;padding:4px 6px}
+.mcell.empty{color:var(--dim);border-style:dashed}
+.mcell.filled{color:#fff;background:#26303f;border-color:#3a4a63}
+.mcell:active{transform:scale(.97)}
 
 .rule{display:flex;align-items:flex-start;gap:10px;padding:7px 0;font-size:.88rem;line-height:1.35}
 .rule+.rule{border-top:1px solid var(--line)}
@@ -79,6 +88,7 @@ button:active{transform:scale(.98)}
       <option value="sequencing">Ordering</option>
       <option value="inout">In / Out</option>
       <option value="grouping">Grouping</option>
+      <option value="matching">Matching</option>
     </select>
     <select id="diff" onchange="newGame()">
       <option value="easy">Easy · 5</option>
@@ -489,14 +499,105 @@ function statementPoolGroup(letters,names,meta){ const s=[];
   return s;
 }
 
+/* ================= FAMILY: Matching (2-D grid) ================= */
+const MATCH_THEMES=[
+  {story:n=>`${n} friends each pick a colour and a weekday`,
+   entities:['Ana','Ben','Cara','Dan','Eve','Finn','Gwen'],
+   attrs:[{name:'Colour',values:['Red','Green','Blue','Amber','Violet','Teal','Pink']},
+          {name:'Day',values:['Mon','Tue','Wed','Thu','Fri','Sat','Sun']}]},
+  {story:n=>`${n} chefs are each assigned a dish and a station`,
+   entities:['Ito','Jer','Kim','Lo','Max','Noa','Ola'],
+   attrs:[{name:'Dish',values:['Ramen','Tacos','Pho','Curry','Gnocchi','Sushi','Mole']},
+          {name:'Station',values:['S1','S2','S3','S4','S5','S6','S7']}]},
+  {story:n=>`${n} houses each get a colour and a pet`,
+   entities:['#1','#2','#3','#4','#5','#6','#7'],
+   attrs:[{name:'Colour',values:['Red','Green','Blue','Amber','Violet','Teal','Pink']},
+          {name:'Pet',values:['Cat','Dog','Fish','Bird','Snake','Frog','Hare']}]},
+  {story:n=>`${n} racers each drive a car and wear a number`,
+   entities:['Ali','Bo','Cy','Dot','Ez','Fi','Gil'],
+   attrs:[{name:'Car',values:['Falcon','Bolt','Comet','Dart','Edge','Fury','Ghost']},
+          {name:'Number',values:['1','2','3','4','5','6','7']}]},
+  {story:n=>`${n} students each choose a language and an instrument`,
+   entities:['Amy','Bea','Cal','Dev','Ela','Fox','Gio'],
+   attrs:[{name:'Language',values:['Arabic','Mandarin','French','German','Hindi','Japanese','Swahili']},
+          {name:'Instrument',values:['Cello','Drums','Flute','Guitar','Harp','Oboe','Piano']}]},
+];
+// state s = { a:{entId->val}, b:{entId->val} }. Two bijections over the value lists.
+function mkRuleMatch(type,args,meta){
+  const {entName,aName,bName,ents}=meta; const findByA=(s,av)=>ents.find(e=>s.a[e]===av);
+  const T={
+    entNotA:()=>({test:s=>s.a[args[0]]!==args[1], txt:`${entName(args[0])}'s ${aName} is not ${args[1]}.`}),
+    entNotB:()=>({test:s=>s.b[args[0]]!==args[1], txt:`${entName(args[0])}'s ${bName} is not ${args[1]}.`}),
+    cross:()=>({test:s=>{const e=findByA(s,args[0]);return e!=null&&s.b[e]===args[1];}, txt:`${args[0]} goes with ${args[1]}.`}),
+    notCross:()=>({test:s=>{const e=findByA(s,args[0]);return e==null||s.b[e]!==args[1];}, txt:`${args[0]} does not go with ${args[1]}.`}),
+    entA:()=>({test:s=>s.a[args[0]]===args[1], txt:`${entName(args[0])}'s ${aName} is ${args[1]}.`}),
+    entB:()=>({test:s=>s.b[args[0]]===args[1], txt:`${entName(args[0])}'s ${bName} is ${args[1]}.`}),
+  };
+  const base=T[type](); const key=type+':'+args.join(',');
+  const partial=(s)=>{ const a=s.a,b=s.b;
+    switch(type){
+      case 'entNotA': return a[args[0]]!=null?(a[args[0]]===args[1]?'bad':'ok'):'pend';
+      case 'entNotB': return b[args[0]]!=null?(b[args[0]]===args[1]?'bad':'ok'):'pend';
+      case 'entA': return a[args[0]]!=null?(a[args[0]]===args[1]?'ok':'bad'):'pend';
+      case 'entB': return b[args[0]]!=null?(b[args[0]]===args[1]?'ok':'bad'):'pend';
+      case 'cross':{const e=findByA(s,args[0]); if(e==null)return 'pend'; return b[e]!=null?(b[e]===args[1]?'ok':'bad'):'pend';}
+      case 'notCross':{const e=findByA(s,args[0]); if(e==null)return 'pend'; return b[e]!=null?(b[e]===args[1]?'bad':'ok'):'pend';}
+    }
+  };
+  return {type,args,key,text:base.txt,test:base.test,partial};
+}
+function stmtMatch(type,args,meta){ const {entName,aName,bName}=meta;
+  const T={
+    entA:()=>({test:s=>s.a[args[0]]===args[1], txt:`${entName(args[0])}'s ${aName} is ${args[1]}.`}),
+    entB:()=>({test:s=>s.b[args[0]]===args[1], txt:`${entName(args[0])}'s ${bName} is ${args[1]}.`}),
+    cross:()=>({test:s=>{const e=meta.ents.find(x=>s.a[x]===args[0]);return e!=null&&s.b[e]===args[1];}, txt:`${args[0]} goes with ${args[1]}.`}),
+  };
+  const b=T[type](); return {key:type+':'+args.join(','),text:b.txt,test:b.test};
+}
+function statementPoolMatch(meta,aVals,bVals){ const s=[];
+  for(const e of meta.ents){ for(const av of aVals) s.push(stmtMatch('entA',[e,av],meta)); for(const bv of bVals) s.push(stmtMatch('entB',[e,bv],meta)); }
+  for(const av of aVals) for(const bv of bVals) s.push(stmtMatch('cross',[av,bv],meta));
+  return s;
+}
+let recentMatch=[];
+function generateMatch(diff){
+  const N={easy:3,medium:4,hard:5}[diff];
+  const avail=MATCH_THEMES.filter(t=>!recentMatch.includes(t)); const pickFrom=avail.length?avail:MATCH_THEMES;
+  const theme=rnd(pickFrom);
+  const chosenEnts=shuffle(theme.entities.slice()).slice(0,N);
+  const ents=chosenEnts.map((nm,i)=>'e'+i); const nameOf={}; chosenEnts.forEach((nm,i)=>nameOf['e'+i]=nm);
+  const aVals=shuffle(theme.attrs[0].values.slice()).slice(0,N);
+  const bVals=shuffle(theme.attrs[1].values.slice()).slice(0,N);
+  const meta={ents, entName:e=>nameOf[e], aName:theme.attrs[0].name, bName:theme.attrs[1].name};
+  const aPerms=perms(aVals), bPerms=perms(bVals); const universe=[];
+  for(const ap of aPerms) for(const bp of bPerms){ const s={a:{},b:{}}; ents.forEach((e,i)=>{s.a[e]=ap[i];s.b[e]=bp[i];}); universe.push(s); }
+  const pool=[];
+  for(const e of ents){ for(const av of aVals){ pool.push(mkRuleMatch('entNotA',[e,av],meta)); pool.push(mkRuleMatch('entA',[e,av],meta)); }
+    for(const bv of bVals){ pool.push(mkRuleMatch('entNotB',[e,bv],meta)); pool.push(mkRuleMatch('entB',[e,bv],meta)); } }
+  for(const av of aVals) for(const bv of bVals){ pool.push(mkRuleMatch('cross',[av,bv],meta)); pool.push(mkRuleMatch('notCross',[av,bv],meta)); }
+  for(let attempt=0;attempt<25;attempt++){
+    let sols=universe.slice(); const rules=[]; const sh=shuffle(pool.slice());
+    while(sols.length>1 && rules.length<8){
+      let best=null,bestLen=sols.length;
+      for(const cand of sh){ if(rules.indexOf(cand)>=0)continue; const len=sols.filter(s=>cand.test(s)).length; if(len>0&&len<bestLen){bestLen=len;best=cand;if(len===1)break;} }
+      if(!best)break; rules.push(best); sols=sols.filter(s=>best.test(s));
+    }
+    if(sols.length===1&&rules.length>=3){
+      recentMatch.push(theme); while(recentMatch.length>Math.min(3,MATCH_THEMES.length-1))recentMatch.shift();
+      return {N,theme,meta,ents,aVals,bVals,rules:shuffle(rules),sols};
+    }
+  }
+  return null;
+}
+
 // difficulty-weighted family mix (explicit picker overrides). More exotic families climb with difficulty.
 function pickFamily(diff){
   const sel=document.getElementById('fam').value;
   if(sel!=='random')return sel;
-  const w={easy:{sequencing:0.80,inout:0.15,grouping:0.05},
-           medium:{sequencing:0.50,inout:0.30,grouping:0.20},
-           hard:{sequencing:0.35,inout:0.30,grouping:0.35}}[diff];
-  let r=Math.random(),acc=0; for(const f of ['sequencing','inout','grouping']){ acc+=w[f]; if(r<acc)return f; } return 'sequencing';
+  const w={easy:{sequencing:0.70,inout:0.15,grouping:0.10,matching:0.05},
+           medium:{sequencing:0.42,inout:0.25,grouping:0.20,matching:0.13},
+           hard:{sequencing:0.30,inout:0.25,grouping:0.25,matching:0.20}}[diff];
+  let r=Math.random(),acc=0; for(const f of ['sequencing','inout','grouping','matching']){ acc+=w[f]; if(r<acc)return f; } return 'sequencing';
 }
 
 /* ---------- deduction quiz from the solution set ---------- */
@@ -513,7 +614,8 @@ function buildQuiz(G){
   const {sols,letters,N,names,theme}=G;
   const pool = G.family==='sequencing' ? statementPool(letters,N,names,theme.slot)
              : G.family==='inout' ? statementPoolIO(letters,names)
-             : statementPoolGroup(letters,names,G.meta);
+             : G.family==='grouping' ? statementPoolGroup(letters,names,G.meta)
+             : statementPoolMatch(G.meta,G.aVals,G.bVals);
   // dedupe by key
   const seen={}; const uniq=pool.filter(s=>seen[s.key]?false:(seen[s.key]=1));
   const always=[],never=[],some=[];
@@ -555,15 +657,18 @@ function makeQ(stem,ans,distractors,why){
 }
 
 /* ---------- state + render ---------- */
-let G=null, placement=[], assign={}, sel=null, revealed=false;   // revealed: rule pass/fail only shown after Check
+let G=null, placement=[], assign={}, mAssign={a:{},b:{}}, sel=null, revealed=false;   // revealed: rule pass/fail only shown after Check
 function newGame(){ const diff=document.getElementById('diff').value; const fam=pickFamily(diff);
-  G = fam==='inout' ? generateInOut(diff) : fam==='grouping' ? generateGroup(diff) : generate(diff);
+  G = fam==='inout' ? generateInOut(diff) : fam==='grouping' ? generateGroup(diff) : fam==='matching' ? generateMatch(diff) : generate(diff);
   if(!G){ alert('Generator hiccup — tap New Game again.'); return; }
   G.family=fam; sel=null; revealed=false;
   if(fam==='sequencing'){ placement=Array(G.N).fill(null);
     document.getElementById('setup').innerHTML =
       `${G.theme.story(G.N)} — one at each of ${G.N} ${G.theme.slot}s numbered <b>1–${G.N}</b>, left to right. `+
       `Place all ${G.N} so every rule holds. Items: `+G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+  } else if(fam==='matching'){ mAssign={a:{},b:{}}; G.ents.forEach(e=>{mAssign.a[e]=null;mAssign.b[e]=null;});
+    document.getElementById('setup').innerHTML =
+      `${G.theme.story(G.N)}. Each gets one <b>${G.meta.aName}</b> and one <b>${G.meta.bName}</b> — every value used once. Tap a cell to cycle it; fill the grid so every rule holds.`;
   } else { assign={};
     if(fam==='inout'){ G.zones=[{id:'in',label:G.theme.inLabel},{id:'out',label:G.theme.outLabel}];
       document.getElementById('setup').innerHTML =
@@ -583,8 +688,11 @@ function newGame(){ const diff=document.getElementById('diff').value; const fam=
 }
 function curPos(){const p={};G.letters.forEach(l=>p[l]=null);placement.forEach((l,i)=>{if(l)p[l]=i+1;});return p;}
 function curAssign(){const m={};G.letters.forEach(l=>m[l]=assign[l]||null);return m;}
-function curState(){return G.family==='sequencing'?curPos():curAssign();}
-function allPlaced(){return G.family==='sequencing'?!placement.includes(null):G.letters.every(l=>assign[l]);}
+function curMatch(){return {a:{...mAssign.a}, b:{...mAssign.b}};}
+function curState(){return G.family==='sequencing'?curPos():G.family==='matching'?curMatch():curAssign();}
+function allPlaced(){return G.family==='sequencing'?!placement.includes(null)
+  :G.family==='matching'?G.ents.every(e=>mAssign.a[e]!=null&&mAssign.b[e]!=null)
+  :G.letters.every(l=>assign[l]);}
 // sel = null | {letter, at}  where at = station index (0-based) or -1 for the tray.
 // Tap-to-move and drag-and-drop share one mover: applyMove(from,to).
 let dragData=null;
@@ -598,7 +706,33 @@ function dropTarget(el,to){         // to = station index | 'tray'
   el.ondragleave=()=>el.classList.remove('dragover');
   el.ondrop=e=>{ e.preventDefault(); el.classList.remove('dragover'); if(dragData){ const d=dragData; dragData=null; applyMove(d,to); } };
 }
-function render(){ if(!G)return; return G.family==='sequencing'?renderSeq():renderBins(); }
+function render(){ if(!G)return; return G.family==='sequencing'?renderSeq():G.family==='matching'?renderMatch():renderBins(); }
+function renderMatch(){
+  const st=document.getElementById('stations'); st.style.display='block'; st.style.gap=''; st.innerHTML='';
+  const tray=document.getElementById('tray'); tray.style.display='none'; tray.innerHTML='';
+  const head=document.createElement('div'); head.className='mrow mhead';
+  head.innerHTML=`<div class="ment"></div><div class="mcolhead">${G.meta.aName}</div><div class="mcolhead">${G.meta.bName}</div>`;
+  st.appendChild(head);
+  G.ents.forEach(e=>{
+    const row=document.createElement('div'); row.className='mrow';
+    const nm=document.createElement('div'); nm.className='ment'; nm.textContent=G.meta.entName(e); row.appendChild(nm);
+    ['a','b'].forEach(cat=>{
+      const v=mAssign[cat][e]; const cell=document.createElement('div');
+      cell.className='mcell '+(v!=null?'filled':'empty'); cell.textContent=v!=null?v:'—';
+      cell.onclick=()=>cycleCell(cat,e); row.appendChild(cell);
+    });
+    st.appendChild(row);
+  });
+  renderRules();
+}
+function cycleCell(cat,e){
+  const vals=cat==='a'?G.aVals:G.bVals;
+  const usedElsewhere=G.ents.filter(x=>x!==e).map(x=>mAssign[cat][x]).filter(v=>v!=null);
+  const avail=vals.filter(v=>!usedElsewhere.includes(v));   // enforce bijection: skip values already used in this column
+  const cycle=[null,...avail]; let idx=cycle.indexOf(mAssign[cat][e]); if(idx<0)idx=0;
+  mAssign[cat][e]=cycle[(idx+1)%cycle.length];
+  revealed=false; banner(false); render();
+}
 function renderSeq(){
   const st=document.getElementById('stations');
   st.style.display='grid'; st.style.gridTemplateColumns=`repeat(${G.N},1fr)`; st.style.gap='6px'; st.innerHTML='';
@@ -665,18 +799,24 @@ function renderRules(){const S=curState();const box=document.getElementById('rul
 function solved(){ if(!allPlaced())return false; const S=curState(); return G.rules.every(r=>r.test(S)); }
 function banner(v){document.getElementById('banner').classList.toggle('show',v);}
 function check(){ if(!allPlaced()){ revealed=false; banner(false); render();
-    const left=G.family==='sequencing'?placement.filter(x=>!x).length:G.letters.filter(l=>!assign[l]).length;
-    hint('Place all '+G.N+' first — '+left+' to go.'); return; }
+    let left;
+    if(G.family==='sequencing') left=placement.filter(x=>!x).length;
+    else if(G.family==='matching') left=G.ents.reduce((n,e)=>n+(mAssign.a[e]==null?1:0)+(mAssign.b[e]==null?1:0),0);
+    else left=G.letters.filter(l=>!assign[l]).length;
+    hint((G.family==='matching'?'Fill every cell':'Place all '+G.N)+' first — '+left+' to go.'); return; }
   revealed=true; render();   // reveal per-rule pass/fail now
   if(solved())banner(true); else {banner(false);const S=curState();const b=G.rules.filter(r=>r.partial(S)==='bad').length;
     hint(b+' rule'+(b!==1?'s':'')+' still broken — see red.');}}
 function defaultHint(){ if(!G)return '— tap an item, then a spot';
   if(G.family==='sequencing')return '— tap an item, then a '+G.theme.slot;
   if(G.family==='inout')return '— tap an item, then '+G.theme.inLabel+' or '+G.theme.outLabel;
+  if(G.family==='matching')return '— tap a cell to cycle its value';
   return '— tap an item, then a '+G.meta.unit; }
 function hint(m){const h=document.getElementById('tapHint');h.textContent='— '+m;
   setTimeout(()=>h.textContent=defaultHint(),2600);}
-function reset(){ if(G.family==='sequencing')placement=Array(G.N).fill(null); else assign={}; sel=null;revealed=false;banner(false);render();}
+function reset(){ if(G.family==='sequencing')placement=Array(G.N).fill(null);
+  else if(G.family==='matching'){ mAssign={a:{},b:{}}; G.ents.forEach(e=>{mAssign.a[e]=null;mAssign.b[e]=null;}); }
+  else assign={}; sel=null;revealed=false;banner(false);render();}
 function renderQuiz(){const box=document.getElementById('quiz');box.innerHTML='';
   if(!G.quiz.length){box.innerHTML='<div class="foot" style="margin:0;text-align:left">This board’s solution set was too tight for clean questions — tap New Game for one with deductions.</div>';return;}
   G.quiz.forEach((q,qi)=>{const d=document.createElement('div');d.className='q';
