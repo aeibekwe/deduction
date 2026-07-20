@@ -93,20 +93,40 @@ button:active{transform:scale(.98)}
   Each board is brute-force-verified solvable; questions are derived from the actual solution set.</div>
 </div>
 <script>
-/* ---------- themes ---------- (items must have distinct initials) */
+/* ---------- themes ---------- (items in a theme must have distinct initials;
+   `slot` must read naturally as "at <slot> 3" and pluralize with +s) */
 const THEMES = [
-  {slot:'station', verb:'poured at', story:n=>`A café pours ${n} single-origin coffees`,
+  {slot:'station', story:n=>`A café pours ${n} single-origin coffees`,
    items:[['B','Brazil'],['C','Colombia'],['E','Ethiopia'],['G','Guatemala'],['K','Kenya'],['P','Peru'],['S','Sumatra']]},
-  {slot:'lane', verb:'assigned to', story:n=>`${n} sprinters are assigned racing lanes`,
+  {slot:'lane', story:n=>`${n} sprinters are assigned racing lanes`,
    items:[['A','Ana'],['B','Ben'],['C','Cara'],['D','Devi'],['E','Eli'],['F','Faye'],['G','Gus']]},
-  {slot:'slot', verb:'booked into', story:n=>`${n} bands are booked into festival time slots`,
+  {slot:'slot', story:n=>`${n} bands are booked into festival time slots`,
    items:[['H','Halo'],['J','Judo'],['K','Krill'],['L','Lyra'],['M','Muse'],['N','Nova'],['O','Onyx']]},
-  {slot:'position', verb:'hung at', story:n=>`${n} paintings are hung in a row`,
+  {slot:'position', story:n=>`${n} paintings are hung in a row`,
    items:[['R','Reef'],['S','Storm'],['T','Tide'],['U','Umbra'],['V','Vale'],['W','Wren'],['Y','Yolk']]},
+  {slot:'platform', story:n=>`${n} trains pull into the numbered platforms`,
+   items:[['A','Aspen'],['B','Blythe'],['C','Carson'],['D','Denton'],['E','Elko'],['F','Fresno'],['G','Galena']]},
+  {slot:'course', story:n=>`A chef plates a ${n}-course tasting menu`,
+   items:[['A','Amuse'],['B','Broth'],['C','Crudo'],['D','Duck'],['F','Fig'],['G','Gnocchi'],['S','Sorbet']]},
+  {slot:'slot', story:n=>`${n} novels are shelved left to right`,
+   items:[['A','Ash'],['B','Bloom'],['C','Cove'],['D','Dune'],['E','Ember'],['F','Frost'],['H','Haven']]},
+  {slot:'position', story:n=>`${n} witnesses are called to testify, in order`,
+   items:[['A','Alvarez'],['B','Brooks'],['C','Chen'],['D','Diaz'],['E','Ellis'],['F','Fenn'],['G','Grant']]},
+  {slot:'pad', story:n=>`${n} rockets stand on the launch pads`,
+   items:[['A','Apex'],['B','Bolt'],['C','Comet'],['D','Dart'],['F','Falcon'],['O','Orbit'],['V','Vega']]},
+  {slot:'orbit', story:n=>`An observatory charts ${n} planets outward from a star`,
+   items:[['A','Arda'],['B','Boreas'],['C','Cygnus'],['D','Draco'],['E','Echo'],['F','Fenrir'],['G','Gaia']]},
+  {slot:'board', story:n=>`${n} chess players are seated at the boards`,
+   items:[['A','Adler'],['B','Bisu'],['C','Cortez'],['D','Dvora'],['K','Kane'],['P','Petrov'],['R','Rook']]},
+  {slot:'jar', story:n=>`${n} spice jars sit in the rack`,
+   items:[['A','Anise'],['B','Basil'],['C','Clove'],['D','Dill'],['G','Ginger'],['M','Mint'],['S','Sage']]},
+  {slot:'spot', story:n=>`${n} food trucks park along the curb`,
+   items:[['B','Bao'],['C','Churro'],['F','Falafel'],['G','Gyro'],['P','Pretzel'],['T','Taco'],['W','Waffle']]},
+  {slot:'position', story:n=>`${n} surfers paddle out for the heat`,
+   items:[['A','Ari'],['J','Jax'],['K','Kai'],['L','Lena'],['M','Moe'],['R','Remy'],['Z','Zoe']]},
 ];
-const PALETTE={B:'#ffb340',C:'#5ac8fa',E:'#ff6482',G:'#67e88b',K:'#bf9dff',P:'#ffd60a',S:'#ff9f0a',
-  A:'#ff6482',D:'#5ac8fa',F:'#67e88b',H:'#ffb340',J:'#bf9dff',L:'#ffd60a',M:'#5ac8fa',N:'#67e88b',O:'#ff9f0a',
-  R:'#ff6482',T:'#5ac8fa',U:'#bf9dff',V:'#67e88b',W:'#ffd60a',Y:'#ff9f0a'};
+// Colors are assigned per-game (by tile order), so any theme/names work without a letter map.
+const COLORS=['#ff6482','#5ac8fa','#67e88b','#ffd60a','#bf9dff','#ff9f0a','#30d0c0','#ff7ac8'];
 const rnd=a=>a[Math.floor(Math.random()*a.length)];
 const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 
@@ -172,6 +192,7 @@ function generate(diff){
     const theme=rnd(THEMES);
     const chosen=shuffle(theme.items.slice()).slice(0,N);
     const letters=chosen.map(x=>x[0]); const names={}; chosen.forEach(x=>names[x[0]]=x[1]);
+    const cols=shuffle(COLORS.slice()); const palette={}; letters.forEach((l,i)=>palette[l]=cols[i%cols.length]);
     let sols=perms(letters).map(posOf); const rules=[];
     const pool=shuffle(candidatePool(letters,N,names,theme.slot));
     for(const cand of pool){
@@ -182,7 +203,7 @@ function generate(diff){
       rules.push(cand); sols=next;
     }
     if(sols.length===1 && rules.length>=3){      // exactly one solution, non-trivial rule set
-      return {N,theme,letters,names,rules,sols};
+      return {N,theme,letters,names,palette,rules,sols};
     }
   }
   return null; // (retry loop virtually always succeeds)
@@ -303,7 +324,7 @@ function clickCell(i){
   applyMove(sel,i);                                                          // move / swap
 }
 function tile(l,selc){const t=document.createElement('div');t.className='tile'+(selc?' sel':'');
-  t.style.background=PALETTE[l]||'#88c'; t.textContent=l; t.title=G.names[l]; return t;}
+  t.style.background=(G.palette&&G.palette[l])||'#88c'; t.textContent=l; t.title=G.names[l]; return t;}
 function renderRules(){const pos=curPos();const box=document.getElementById('rules');box.innerHTML='';
   G.rules.forEach(r=>{const s=r.partial(pos);const row=document.createElement('div');row.className='rule'+(s==='bad'?' bad':'');
     row.innerHTML='<span class="dot '+(s==='ok'?'ok':s==='bad'?'bad':'')+'">'+(s==='ok'?'✓':s==='bad'?'✕':'')+'</span><span class="rtext">'+r.text+'</span>';
