@@ -133,14 +133,41 @@ const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()
 /* ---------- rule + statement engine ---------- */
 function mkRule(type,args,N,names,slot){
   const nm=x=>names[x];
+  // Each rule type has several interchangeable phrasings; one is picked per rule.
+  // Keep phrasings subject-first so they read cleanly when embedded in quiz
+  // explanations ("<text> is forced by the rules.", "No valid arrangement allows <text>").
   const T={
-    before:([X,Y])=>({t:p=>p[X]<p[Y], txt:`${nm(X)} is somewhere before ${nm(Y)}.`}),
-    immBefore:([X,Y])=>({t:p=>p[Y]===p[X]+1, txt:`${nm(X)} is immediately before ${nm(Y)}.`}),
-    atPos:([X,k])=>({t:p=>p[X]===k, txt:`${nm(X)} is at ${slot} ${k}.`}),
-    notPos:([X,k])=>({t:p=>p[X]!==k, txt:`${nm(X)} is not at ${slot} ${k}.`}),
-    atEnd:([X])=>({t:p=>p[X]===1||p[X]===N, txt:`${nm(X)} is at an end (${slot} 1 or ${N}).`}),
-    adjacent:([X,Y])=>({t:p=>Math.abs(p[X]-p[Y])===1, txt:`${nm(X)} is next to ${nm(Y)}.`}),
-    notAdjacent:([X,Y])=>({t:p=>Math.abs(p[X]-p[Y])!==1, txt:`${nm(X)} is not next to ${nm(Y)}.`}),
+    before:([X,Y])=>({t:p=>p[X]<p[Y], txt:rnd([
+      `${nm(X)} is somewhere before ${nm(Y)}.`,
+      `${nm(X)} comes before ${nm(Y)}.`,
+      `${nm(X)} is placed somewhere to the left of ${nm(Y)}.`,
+      `${nm(Y)} is somewhere after ${nm(X)}.`])}),
+    immBefore:([X,Y])=>({t:p=>p[Y]===p[X]+1, txt:rnd([
+      `${nm(X)} is immediately before ${nm(Y)}.`,
+      `${nm(X)} is directly before ${nm(Y)}.`,
+      `${nm(X)} comes right before ${nm(Y)}.`,
+      `${nm(Y)} is immediately after ${nm(X)}.`])}),
+    atPos:([X,k])=>({t:p=>p[X]===k, txt:rnd([
+      `${nm(X)} is at ${slot} ${k}.`,
+      `${nm(X)} occupies ${slot} ${k}.`,
+      `${nm(X)} takes ${slot} ${k}.`])}),
+    notPos:([X,k])=>({t:p=>p[X]!==k, txt:rnd([
+      `${nm(X)} is not at ${slot} ${k}.`,
+      `${nm(X)} does not take ${slot} ${k}.`,
+      `${nm(X)} is anywhere but ${slot} ${k}.`])}),
+    atEnd:([X])=>({t:p=>p[X]===1||p[X]===N, txt:rnd([
+      `${nm(X)} is at an end (${slot} 1 or ${N}).`,
+      `${nm(X)} is on one of the two ends (${slot} 1 or ${N}).`,
+      `${nm(X)} sits at an end (${slot} 1 or ${N}).`])}),
+    adjacent:([X,Y])=>({t:p=>Math.abs(p[X]-p[Y])===1, txt:rnd([
+      `${nm(X)} is next to ${nm(Y)}.`,
+      `${nm(X)} is directly beside ${nm(Y)}.`,
+      `${nm(X)} and ${nm(Y)} are neighbors.`,
+      `${nm(X)} sits right next to ${nm(Y)}.`])}),
+    notAdjacent:([X,Y])=>({t:p=>Math.abs(p[X]-p[Y])!==1, txt:rnd([
+      `${nm(X)} is not next to ${nm(Y)}.`,
+      `${nm(X)} and ${nm(Y)} are not neighbors.`,
+      `${nm(X)} is not beside ${nm(Y)}.`])}),
   };
   const base=T[type](args);
   const key=type+':'+args.join(',');
