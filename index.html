@@ -35,8 +35,8 @@ select{flex:1;background:var(--card2);color:var(--text);border:1px solid var(--l
 .tile{width:100%;height:100%;border-radius:11px;display:flex;align-items:center;justify-content:center;
   font-weight:800;font-size:1.25rem;color:#0b0b0f;cursor:pointer;user-select:none;transition:transform .1s}
 .tile:active{transform:scale(.94)}
-.tray{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;min-height:50px}
-.tray .slot{width:44px;height:44px}
+.tray{display:grid;gap:6px;margin-top:12px}
+.tray .slot{aspect-ratio:1/1.15}
 .tray .tile{border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .tile.sel{outline:3px solid #fff;outline-offset:2px}
 
@@ -252,6 +252,7 @@ function newGame(){ G=generate(document.getElementById('diff').value);
   document.getElementById('tapHint').textContent = defaultHint();
   document.getElementById('banner').classList.remove('show');
   document.getElementById('stations').style.gridTemplateColumns=`repeat(${G.N},1fr)`;
+  document.getElementById('tray').style.gridTemplateColumns=`repeat(${G.N},1fr)`;
   G.quiz=buildQuiz(G);
   render(); renderQuiz();
 }
@@ -281,12 +282,8 @@ function render(){
     dropTarget(cell,i);
     st.appendChild(cell);
   }
-  // Match tray tiles to the current board cell size (which shrinks/grows with difficulty).
-  const firstCell=st.firstElementChild, r=firstCell&&firstCell.getBoundingClientRect();
-  const cellW=r&&r.width?r.width:44, cellH=r&&r.height?r.height:44;
   const tray=document.getElementById('tray');tray.innerHTML='';
   G.letters.forEach(l=>{const slot=document.createElement('div');slot.className='slot';
-    slot.style.width=cellW+'px'; slot.style.height=cellH+'px';
     if(!placement.includes(l)){ const selc = sel && sel.at===-1 && sel.letter===l;
       const t=tile(l,selc); wireDrag(t,l,-1);
       t.onclick=()=>{ sel = selc?null:{letter:l,at:-1}; render(); }; slot.appendChild(t); }
@@ -334,6 +331,4 @@ function renderQuiz(){const box=document.getElementById('quiz');box.innerHTML=''
     box.appendChild(d);});
 }
 newGame();
-// Keep tray tiles matched to board cells across resize / orientation changes.
-let _rz; addEventListener('resize',()=>{clearTimeout(_rz);_rz=setTimeout(()=>{if(G)render();},120);});
 </script></body></html>
