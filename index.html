@@ -58,6 +58,13 @@ select{flex:1;background:var(--card2);color:var(--text);border:1px solid var(--l
 .mcell.empty{color:var(--dim);border-style:dashed}
 .mcell.filled{color:#fff;background:#26303f;border-color:#3a4a63}
 .mcell:active{transform:scale(.97)}
+/* matching value pool ("tiles") — a legend that dims as values are placed */
+.mlegend{margin-bottom:14px;display:flex;flex-direction:column;gap:8px}
+.mlegrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mleglabel{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:700;min-width:64px}
+.mlegchips{display:flex;flex-wrap:wrap;gap:6px}
+.mchip{background:#26303f;border:1px solid #3a4a63;border-radius:9px;padding:4px 10px;font-size:.82rem;font-weight:600;color:#fff;transition:.12s}
+.mchip.used{opacity:.3;text-decoration:line-through;color:var(--dim)}
 
 .rule{display:flex;align-items:flex-start;gap:10px;padding:7px 0;font-size:.88rem;line-height:1.35}
 .rule+.rule{border-top:1px solid var(--line)}
@@ -842,6 +849,17 @@ function render(){ if(!G)return; return G.family==='sequencing'?renderSeq():G.fa
 function renderMatch(){
   const st=document.getElementById('stations'); st.style.display='block'; st.style.gap=''; st.innerHTML='';
   const tray=document.getElementById('tray'); tray.style.display='none'; tray.innerHTML='';
+  // value pool — the "tiles" you place; each dims once it's used (every value used once)
+  const legend=document.createElement('div'); legend.className='mlegend';
+  [['a',G.meta.aName,G.aVals],['b',G.meta.bName,G.bVals]].forEach(([cat,label,vals])=>{
+    const used=new Set(G.ents.map(e=>mAssign[cat][e]).filter(v=>v!=null));
+    const row=document.createElement('div'); row.className='mlegrow';
+    row.innerHTML=`<span class="mleglabel">${label}</span>`;
+    const chips=document.createElement('div'); chips.className='mlegchips';
+    vals.forEach(v=>{ const c=document.createElement('span'); c.className='mchip'+(used.has(v)?' used':''); c.textContent=v; chips.appendChild(c); });
+    row.appendChild(chips); legend.appendChild(row);
+  });
+  st.appendChild(legend);
   const head=document.createElement('div'); head.className='mrow mhead';
   head.innerHTML=`<div class="ment"></div><div class="mcolhead">${G.meta.aName}</div><div class="mcolhead">${G.meta.bName}</div>`;
   st.appendChild(head);
