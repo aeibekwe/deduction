@@ -95,6 +95,10 @@ button:active{transform:scale(.98)}
       <option value="medium" selected>Medium · 6</option>
       <option value="hard">Hard · 7</option>
     </select>
+    <select id="mode" onchange="newGame()">
+      <option value="play" selected>Play — solve the board</option>
+      <option value="deduce">Deductions — questions only</option>
+    </select>
     <button class="primary" onclick="newGame()">New Game ↻</button>
   </div>
 
@@ -103,7 +107,7 @@ button:active{transform:scale(.98)}
     <div class="setup" id="setup"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="boardCard">
     <h2>The Board <span class="n" id="tapHint">— tap an item, then a station</span></h2>
     <div class="stations" id="stations"></div>
     <div class="tray" id="tray"></div>
@@ -275,7 +279,7 @@ function generate(diff){
     const chosen=shuffle(theme.items.slice()).slice(0,N);
     const letters=chosen.map(x=>x[0]); const names={}; chosen.forEach(x=>names[x[0]]=x[1]);
     const cols=shuffle(COLORS.slice()); const palette={}; letters.forEach((l,i)=>palette[l]=cols[i%cols.length]);
-    let sols=perms(letters).map(posOf); const rules=[]; let numeric=0;
+    const universe=perms(letters).map(posOf); let sols=universe.slice(); const rules=[]; let numeric=0;
     const pool=shuffle(candidatePool(letters,N,names,theme.slot));
     for(const cand of pool){
       if(rules.length>=9 || sols.length===1) break;   // keep going until the answer is UNIQUE
@@ -287,7 +291,7 @@ function generate(diff){
     }
     if(sols.length===1 && rules.length>=3){      // exactly one solution, non-trivial rule set
       recentThemes.push(theme); while(recentThemes.length>RECENT_KEEP) recentThemes.shift();
-      return {N,theme,letters,names,palette,rules,sols};
+      return {N,theme,letters,names,palette,rules,sols,universe};
     }
   }
   return null; // (retry loop virtually always succeeds)
@@ -377,7 +381,7 @@ function generateInOut(diff){
     }
     if(sols.length===1&&rules.length>=3){
       recentIO.push(theme); while(recentIO.length>Math.min(4,INOUT_THEMES.length-1))recentIO.shift();
-      return {N,theme,letters,names,palette,rules,sols};
+      return {N,theme,letters,names,palette,rules,sols,universe};
     }
   }
   return null;
@@ -480,7 +484,7 @@ function generateGroup(diff){
     }
     if(sols.length===1&&rules.length>=3){
       recentGroup.push(theme); while(recentGroup.length>Math.min(4,GROUP_THEMES.length-1))recentGroup.shift();
-      return {N,theme,letters,names,palette,rules:shuffle(rules),sols,meta,groupNames:theme.groups.slice(0,nG)};
+      return {N,theme,letters,names,palette,rules:shuffle(rules),sols,meta,groupNames:theme.groups.slice(0,nG),universe};
     }
   }
   return null;
@@ -584,7 +588,7 @@ function generateMatch(diff){
     }
     if(sols.length===1&&rules.length>=3){
       recentMatch.push(theme); while(recentMatch.length>Math.min(3,MATCH_THEMES.length-1))recentMatch.shift();
-      return {N,theme,meta,ents,aVals,bVals,rules:shuffle(rules),sols};
+      return {N,theme,meta,ents,aVals,bVals,rules:shuffle(rules),sols,universe};
     }
   }
   return null;
@@ -656,12 +660,140 @@ function makeQ(stem,ans,distractors,why){
   const opts=shuffle([ans,...distractors]); return {stem,opts,ansIdx:opts.indexOf(ans),why};
 }
 
+/* ================= DEDUCTIONS MODE (no board, multi-solution) ================= */
+// choose k indices out of [0..n-1]
+function combos(n,k){ const res=[]; (function rec(start,acc){ if(acc.length===k){res.push(acc.slice());return;}
+  for(let i=start;i<n;i++){acc.push(i);rec(i+1,acc);acc.pop();} })(0,[]); return res; }
+// Relax a unique-solution puzzle by dropping up to 3 rules until the solution set lands in [lo,hi].
+// Keeps ≥3 rules so the setup still reads like a real game.
+function relaxToBand(G,lo,hi){
+  const U=G.universe; if(!U) return null;
+  const R=G.rules; const n=R.length;
+  const solsFor=keep=>{ const rs=keep.map(i=>R[i]); return U.filter(s=>rs.every(r=>r.test(s))); };
+  const idxAll=R.map((_,i)=>i);
+  for(let drop=1; drop<=Math.min(3,n-3); drop++){
+    let best=null;
+    for(const rem of combos(n,drop)){
+      const keep=idxAll.filter(i=>rem.indexOf(i)<0);
+      const sols=solsFor(keep);
+      if(sols.length>=lo && sols.length<=hi){
+        const score=keep.length*100 - Math.abs(sols.length-5); // prefer more rules, count near 5
+        if(!best||score>best.score) best={keep,sols,score};
+      }
+    }
+    if(best) return {...G, rules:shuffle(best.keep.map(i=>R[i])), sols:best.sols};
+  }
+  return null;
+}
+function generateDeduction(diff){
+  for(let t=0;t<60;t++){
+    const fam=pickFamily(diff);
+    const base = fam==='inout'?generateInOut(diff):fam==='grouping'?generateGroup(diff):fam==='matching'?generateMatch(diff):generate(diff);
+    if(!base) continue; base.family=fam;
+    const relaxed=relaxToBand(base,3,8);
+    if(relaxed){ relaxed.family=fam; relaxed.deduce=true; return relaxed; }
+  }
+  return null;
+}
+// Richer question set that exploits a 3-8 solution space: must / cannot / could / conditional.
+function buildDeductionQuiz(G){
+  const {sols,letters,N,names,theme}=G;
+  const pool = G.family==='sequencing' ? statementPool(letters,N,names,theme.slot)
+             : G.family==='inout' ? statementPoolIO(letters,names)
+             : G.family==='grouping' ? statementPoolGroup(letters,names,G.meta)
+             : statementPoolMatch(G.meta,G.aVals,G.bVals);
+  const seen={}; const uniq=pool.filter(s=>seen[s.key]?false:(seen[s.key]=1));
+  const always=[],never=[],some=[];
+  uniq.forEach(s=>{const c=classify(s,sols); (c==='always'?always:c==='never'?never:some).push(s);});
+  const qs=[]; const used={};
+  const take=arr=>{ const p=arr.filter(a=>!used[a.key]); if(!p.length)return null; const a=rnd(p); used[a.key]=1; return a; };
+  // MUST be true — distractors are things that merely COULD be (or are impossible)
+  if(always.length){ const dp=some.length>=3?some:never; if(dp.length>=3){ const ans=take(always);
+    if(ans) qs.push(makeQ('Which one of the following must be true?',ans,pick(dp,3,[ans]),
+      `${ans.text.replace(/\.$/,'')} holds in every valid arrangement.`)); } }
+  // CANNOT be true — distractors are things that are possible
+  if(never.length){ const dp=some.length>=3?some:always; if(dp.length>=3){ const ans=take(never);
+    if(ans) qs.push(makeQ('Which one of the following CANNOT be true?',ans,pick(dp,3,[ans]),
+      `No valid arrangement allows ${lower(ans.text)}`)); } }
+  // COULD be true — the multi-solution payoff: answer is possible-but-not-forced, distractors are impossible
+  if(some.length&&never.length>=3){ const ans=take(some);
+    if(ans) qs.push(makeQ('Which one of the following COULD be true?',ans,pick(never,3,[ans]),
+      `${ans.text.replace(/\.$/,'')} is not forced, but at least one valid arrangement has it.`)); }
+  // A second MUST for variety
+  if(always.length){ const ans=take(always); const dp=some.length>=3?some:never;
+    if(ans&&dp.length>=3) qs.push(makeQ('Which one of the following must be true?',ans,pick(dp,3,[ans]),
+      `${ans.text.replace(/\.$/,'')} is forced by the constraints.`)); }
+  // CONDITIONALs — up to 2, each a real sub-space deduction
+  let cond=0;
+  for(const c of shuffle(some.slice())){
+    if(cond>=2) break;
+    const sub=sols.filter(P=>c.test(P)); if(sub.length<1||sub.length===sols.length) continue;
+    const subAlways=uniq.filter(s=>sub.every(P=>s.test(P))&&!sols.every(P=>s.test(P)));
+    const subSome=uniq.filter(s=>{const k=sub.filter(P=>s.test(P)).length;return k>0&&k<sub.length;});
+    const subNever=uniq.filter(s=>sub.every(P=>!s.test(P))&&!sols.every(P=>!s.test(P)));
+    const dp=subSome.length>=3?subSome:subNever;
+    if(subAlways.length&&dp.length>=3){ const ans=rnd(subAlways.filter(a=>!used[a.key])||subAlways);
+      const A=ans||rnd(subAlways); used[A.key]=1;
+      qs.push(makeQ(`If ${c.text.replace(/\.$/,'')}, then which one of the following must be true?`,A,pick(dp,3,[A]),
+        `Once ${c.text.replace(/\.$/,'')}, only certain arrangements remain — and all satisfy “${A.text.replace(/\.$/,'')}.”`));
+      cond++; }
+  }
+  return shuffle(qs);
+}
+function newDeduction(diff){
+  document.getElementById('boardCard').style.display='none';
+  document.getElementById('banner').classList.remove('show');
+  G=generateDeduction(diff);
+  if(!G){ alert('Generator hiccup — tap New Game again.'); return; }
+  const fam=G.family; sel=null; revealed=false;
+  let txt;
+  if(fam==='sequencing'){
+    txt=`${G.theme.story(G.N)} — one at each of ${G.N} ${G.theme.slot}s numbered <b>1–${G.N}</b>, left to right. Items: `+G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+  } else if(fam==='matching'){
+    txt=`${G.theme.story(G.N)}. Each gets one <b>${G.meta.aName}</b> and one <b>${G.meta.bName}</b> — every value used once.`;
+  } else if(fam==='inout'){
+    txt=`${G.theme.story(G.N)}. Each of the ${G.N} is either <b>${G.theme.inLabel}</b> or <b>${G.theme.outLabel}</b>. Items: `+G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+  } else {
+    txt=`${G.theme.story(G.N)}. Each of the ${G.N} is in one ${G.meta.unit} — <b>${G.groupNames.join('</b>, <b>')}</b>. Items: `+G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+  }
+  document.getElementById('setup').innerHTML = txt+' <em>No board — reason from the rules to answer the deductions below.</em>';
+  document.getElementById('solpill').textContent = G.sols.length+' possible arrangements';
+  renderRulesStatic();
+  G.quiz=buildDeductionQuiz(G);
+  renderDeductionQuiz();
+}
+function renderRulesStatic(){ const box=document.getElementById('rules'); box.innerHTML='';
+  G.rules.forEach(r=>{ const row=document.createElement('div'); row.className='rule';
+    row.innerHTML='<span class="dot">•</span><span class="rtext">'+r.text+'</span>'; box.appendChild(row); }); }
+function renderDeductionQuiz(){ const box=document.getElementById('quiz'); box.innerHTML='';
+  if(!G.quiz.length){ box.innerHTML='<div class="foot" style="margin:0;text-align:left">Couldn’t derive clean questions for this one — tap New Game.</div>'; return; }
+  let score=0, done=0; const total=G.quiz.length;
+  const head=document.createElement('div'); head.className='stem'; head.style.marginBottom='12px';
+  head.textContent=`Score: 0 / ${total}`; box.appendChild(head);
+  G.quiz.forEach((q,qi)=>{ const d=document.createElement('div'); d.className='q';
+    d.innerHTML='<div class="stem">'+(qi+1)+'. '+q.stem+'</div>';
+    q.opts.forEach((o,oi)=>{ const b=document.createElement('button'); b.className='opt';
+      b.textContent=String.fromCharCode(65+oi)+') '+o.text;
+      b.onclick=()=>{ d.querySelectorAll('.opt').forEach(x=>x.style.pointerEvents='none');
+        const right=oi===q.ansIdx; b.classList.add(right?'correct':'wrong');
+        if(!right) d.querySelectorAll('.opt')[q.ansIdx].classList.add('correct');
+        d.querySelector('.expl').classList.add('show');
+        done++; if(right) score++; head.textContent=`Score: ${score} / ${total}`+(done===total?'  ✓ complete':''); };
+      d.appendChild(b); });
+    const e=document.createElement('div'); e.className='expl'; e.textContent='➛ '+q.why; d.appendChild(e);
+    box.appendChild(d); });
+}
+
 /* ---------- state + render ---------- */
 let G=null, placement=[], assign={}, mAssign={a:{},b:{}}, sel=null, revealed=false;   // revealed: rule pass/fail only shown after Check
-function newGame(){ const diff=document.getElementById('diff').value; const fam=pickFamily(diff);
+function newGame(){ const diff=document.getElementById('diff').value;
+  const mode=(document.getElementById('mode')||{}).value||'play';
+  if(mode==='deduce'){ newDeduction(diff); return; }
+  const fam=pickFamily(diff);
+  document.getElementById('boardCard').style.display='';
   G = fam==='inout' ? generateInOut(diff) : fam==='grouping' ? generateGroup(diff) : fam==='matching' ? generateMatch(diff) : generate(diff);
   if(!G){ alert('Generator hiccup — tap New Game again.'); return; }
-  G.family=fam; sel=null; revealed=false;
+  G.family=fam; G.deduce=false; sel=null; revealed=false;
   if(fam==='sequencing'){ placement=Array(G.N).fill(null);
     document.getElementById('setup').innerHTML =
       `${G.theme.story(G.N)} — one at each of ${G.N} ${G.theme.slot}s numbered <b>1–${G.N}</b>, left to right. `+
