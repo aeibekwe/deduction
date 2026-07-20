@@ -186,10 +186,13 @@ function candidatePool(letters,N,names,slot){
   }
   return pool;
 }
+let recentThemes=[]; const RECENT_KEEP=Math.min(5,THEMES.length-1); // don't reuse a theme until this many others have passed
 function generate(diff){
   const N={easy:5,medium:6,hard:7}[diff];
+  const avail=THEMES.filter(t=>!recentThemes.includes(t)); // steer away from recently seen themes
+  const pickFrom=avail.length?avail:THEMES;
   for(let attempt=0;attempt<120;attempt++){
-    const theme=rnd(THEMES);
+    const theme=rnd(pickFrom);
     const chosen=shuffle(theme.items.slice()).slice(0,N);
     const letters=chosen.map(x=>x[0]); const names={}; chosen.forEach(x=>names[x[0]]=x[1]);
     const cols=shuffle(COLORS.slice()); const palette={}; letters.forEach((l,i)=>palette[l]=cols[i%cols.length]);
@@ -203,6 +206,7 @@ function generate(diff){
       rules.push(cand); sols=next;
     }
     if(sols.length===1 && rules.length>=3){      // exactly one solution, non-trivial rule set
+      recentThemes.push(theme); while(recentThemes.length>RECENT_KEEP) recentThemes.shift();
       return {N,theme,letters,names,palette,rules,sols};
     }
   }
