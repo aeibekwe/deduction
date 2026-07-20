@@ -168,11 +168,28 @@ function mkRule(type,args,N,names,slot){
       `${nm(X)} is not next to ${nm(Y)}.`,
       `${nm(X)} and ${nm(Y)} are not neighbors.`,
       `${nm(X)} is not beside ${nm(Y)}.`])}),
+    // ---- numeric spacing rules ----
+    // exactBetween: exactly m slots strictly between X and Y (unordered)
+    exactBetween:([X,Y,m])=>{ const q=m===1?`one ${slot}`:`${m} ${slot}s`;
+      return {t:p=>Math.abs(p[X]-p[Y])===m+1, txt:rnd([
+        `There ${m===1?'is':'are'} exactly ${q} between ${nm(X)} and ${nm(Y)}.`,
+        `${nm(X)} and ${nm(Y)} have exactly ${q} between them.`,
+        `Exactly ${q} ${m===1?'sits':'sit'} between ${nm(X)} and ${nm(Y)}.`])}; },
+    // minApart: X and Y are at least k slots apart (unordered)
+    minApart:([X,Y,k])=>({t:p=>Math.abs(p[X]-p[Y])>=k, txt:rnd([
+      `${nm(X)} and ${nm(Y)} are at least ${k} ${slot}s apart.`,
+      `At least ${k} ${slot}s separate ${nm(X)} and ${nm(Y)}.`,
+      `${nm(X)} and ${nm(Y)} are no closer than ${k} ${slot}s apart.`])}),
+    // exactBefore: X is exactly k slots before Y (ordered)
+    exactBefore:([X,Y,k])=>({t:p=>p[Y]-p[X]===k, txt:rnd([
+      `${nm(X)} is exactly ${k} ${slot}s before ${nm(Y)}.`,
+      `${nm(Y)} is exactly ${k} ${slot}s after ${nm(X)}.`,
+      `${nm(X)} comes exactly ${k} ${slot}s before ${nm(Y)}.`])}),
   };
   const base=T[type](args);
   const key=type+':'+args.join(',');
   const partial=(pos)=>{ // pos: letter->1..N or null
-    const a=args, X=a[0], Y=a[1], k=a[1];
+    const a=args, X=a[0], Y=a[1], k=a[1], m=a[2];   // for numeric rules the count is a[2]
     const px=pos[X], py=pos[Y];
     switch(type){
       case 'before': return (px&&py)?(px<py?'ok':'bad'):'pend';
@@ -182,6 +199,9 @@ function mkRule(type,args,N,names,slot){
       case 'atEnd': return px?((px===1||px===N)?'ok':'bad'):'pend';
       case 'adjacent': return (px&&py)?(Math.abs(px-py)===1?'ok':'bad'):'pend';
       case 'notAdjacent': return (px&&py)?(Math.abs(px-py)===1?'bad':'ok'):'pend';
+      case 'exactBetween': return (px&&py)?(Math.abs(px-py)===m+1?'ok':'bad'):'pend';
+      case 'minApart': return (px&&py)?(Math.abs(px-py)>=m?'ok':'bad'):'pend';
+      case 'exactBefore': return (px&&py)?(py-px===m?'ok':'bad'):'pend';
     }
   };
   return {type,args,key,text:base.txt,test:base.t,partial};
@@ -208,11 +228,17 @@ function candidatePool(letters,N,names,slot){
     for(const Y of letters){ if(X===Y) continue;
       pool.push(mkRule('before',[X,Y],N,names,slot));
       pool.push(mkRule('immBefore',[X,Y],N,names,slot));
-      if(X<Y){ pool.push(mkRule('adjacent',[X,Y],N,names,slot)); pool.push(mkRule('notAdjacent',[X,Y],N,names,slot)); }
+      for(let k=2;k<=N-1;k++) pool.push(mkRule('exactBefore',[X,Y,k],N,names,slot)); // ordered distance (k=1 is immBefore)
+      if(X<Y){ pool.push(mkRule('adjacent',[X,Y],N,names,slot)); pool.push(mkRule('notAdjacent',[X,Y],N,names,slot));
+        for(let m=1;m<=N-2;m++) pool.push(mkRule('exactBetween',[X,Y,m],N,names,slot)); // m items strictly between (m=0 is adjacent)
+        for(let g=2;g<=N-1;g++) pool.push(mkRule('minApart',[X,Y,g],N,names,slot));     // at least g apart (g=1 is trivially true)
+      }
     }
   }
   return pool;
 }
+const NUMERIC_TYPES=new Set(['exactBetween','minApart','exactBefore']); // spacing rules — capped so they stay a spice, not the bulk
+const MAX_NUMERIC=2;
 let recentThemes=[]; const RECENT_KEEP=Math.min(5,THEMES.length-1); // don't reuse a theme until this many others have passed
 function generate(diff){
   const N={easy:5,medium:6,hard:7}[diff];
@@ -223,14 +249,15 @@ function generate(diff){
     const chosen=shuffle(theme.items.slice()).slice(0,N);
     const letters=chosen.map(x=>x[0]); const names={}; chosen.forEach(x=>names[x[0]]=x[1]);
     const cols=shuffle(COLORS.slice()); const palette={}; letters.forEach((l,i)=>palette[l]=cols[i%cols.length]);
-    let sols=perms(letters).map(posOf); const rules=[];
+    let sols=perms(letters).map(posOf); const rules=[]; let numeric=0;
     const pool=shuffle(candidatePool(letters,N,names,theme.slot));
     for(const cand of pool){
       if(rules.length>=9 || sols.length===1) break;   // keep going until the answer is UNIQUE
+      if(NUMERIC_TYPES.has(cand.type) && numeric>=MAX_NUMERIC) continue; // cap spacing clues
       const next=sols.filter(P=>cand.test(P));
       if(next.length===0) continue;              // never kill the puzzle
       if(next.length===sols.length) continue;    // no effect (redundant rule)
-      rules.push(cand); sols=next;
+      rules.push(cand); sols=next; if(NUMERIC_TYPES.has(cand.type)) numeric++;
     }
     if(sols.length===1 && rules.length>=3){      // exactly one solution, non-trivial rule set
       recentThemes.push(theme); while(recentThemes.length>RECENT_KEEP) recentThemes.shift();
