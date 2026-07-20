@@ -281,8 +281,12 @@ function render(){
     dropTarget(cell,i);
     st.appendChild(cell);
   }
+  // Match tray tiles to the current board cell size (which shrinks/grows with difficulty).
+  const firstCell=st.firstElementChild, r=firstCell&&firstCell.getBoundingClientRect();
+  const cellW=r&&r.width?r.width:44, cellH=r&&r.height?r.height:44;
   const tray=document.getElementById('tray');tray.innerHTML='';
   G.letters.forEach(l=>{const slot=document.createElement('div');slot.className='slot';
+    slot.style.width=cellW+'px'; slot.style.height=cellH+'px';
     if(!placement.includes(l)){ const selc = sel && sel.at===-1 && sel.letter===l;
       const t=tile(l,selc); wireDrag(t,l,-1);
       t.onclick=()=>{ sel = selc?null:{letter:l,at:-1}; render(); }; slot.appendChild(t); }
@@ -330,4 +334,6 @@ function renderQuiz(){const box=document.getElementById('quiz');box.innerHTML=''
     box.appendChild(d);});
 }
 newGame();
+// Keep tray tiles matched to board cells across resize / orientation changes.
+let _rz; addEventListener('resize',()=>{clearTimeout(_rz);_rz=setTimeout(()=>{if(G)render();},120);});
 </script></body></html>
