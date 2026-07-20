@@ -39,6 +39,16 @@ select{flex:1;background:var(--card2);color:var(--text);border:1px solid var(--l
 .tray .slot{aspect-ratio:1/1.15}
 .tray .tile{border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .tile.sel{outline:3px solid #fff;outline-offset:2px}
+.tile.fixed{width:44px;height:44px;flex:none;font-size:1.15rem}
+/* in/out selection board */
+.bins{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bin{background:var(--card2);border:1.5px dashed var(--line);border-radius:12px;padding:10px 10px 12px;min-height:108px;transition:.12s;cursor:pointer}
+.bin.armed{border-color:var(--blue);box-shadow:0 0 0 2px rgba(10,132,255,.25) inset}
+.bin.dragover{border-color:var(--blue);background:#18324e;box-shadow:0 0 0 2px rgba(10,132,255,.55) inset}
+.bin h3{margin:0 0 8px;font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.bin h3 .c{font-family:var(--mono);color:var(--text);font-size:.72rem}
+.bin .items{display:flex;flex-wrap:wrap;gap:8px;min-height:44px}
+.pool{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;min-height:44px}
 
 .rule{display:flex;align-items:flex-start;gap:10px;padding:7px 0;font-size:.88rem;line-height:1.35}
 .rule+.rule{border-top:1px solid var(--line)}
@@ -64,7 +74,12 @@ button:active{transform:scale(.98)}
   <div class="sub">Endless logic-games puzzles · classic LSAT “Analytical Reasoning” style</div>
 
   <div class="controls">
-    <select id="diff">
+    <select id="fam" onchange="newGame()">
+      <option value="random" selected>Random type</option>
+      <option value="sequencing">Ordering</option>
+      <option value="inout">In / Out</option>
+    </select>
+    <select id="diff" onchange="newGame()">
       <option value="easy">Easy · 5</option>
       <option value="medium" selected>Medium · 6</option>
       <option value="hard">Hard · 7</option>
@@ -267,6 +282,120 @@ function generate(diff){
   return null; // (retry loop virtually always succeeds)
 }
 
+/* ================= FAMILY: In / Out selection ================= */
+const INOUT_THEMES=[
+  {story:n=>`A panel is chosen from ${n} candidates`, inLabel:'On the panel', outLabel:'Cut',
+   items:[['A','Ames'],['B','Boyd'],['C','Cole'],['D','Diaz'],['E','Estes'],['F','Ford'],['G','Gill']]},
+  {story:n=>`A DJ builds tonight's set from ${n} tracks`, inLabel:'In the set', outLabel:'Skipped',
+   items:[['H','Haze'],['J','Jolt'],['K','Kite'],['L','Loom'],['M','Mira'],['N','Nyx'],['P','Pulse']]},
+  {story:n=>`A chef picks tonight's specials from ${n} dishes`, inLabel:'On the menu', outLabel:'Off tonight',
+   items:[['B','Bisque'],['C','Confit'],['G','Gnocchi'],['L','Laksa'],['R','Ragu'],['S','Souffle'],['T','Tartare']]},
+  {story:n=>`An investor funds some of ${n} startups`, inLabel:'Funded', outLabel:'Passed',
+   items:[['A','Arlo'],['B','Brix'],['C','Cusp'],['D','Dune'],['E','Echo'],['F','Flux'],['G','Grove']]},
+  {story:n=>`A lawyer decides which of ${n} witnesses to call`, inLabel:'Called', outLabel:'Not called',
+   items:[['A','Ali'],['B','Boone'],['C','Cho'],['D','Doyle'],['E','Eng'],['F','Fisk'],['G','Gray']]},
+  {story:n=>`${n} friends — some are in for the trip`, inLabel:'Going', outLabel:'Staying home',
+   items:[['A','Aya'],['B','Bex'],['C','Cody'],['D','Dev'],['E','Emi'],['F','Fin'],['G','Gus']]},
+];
+// Board rule for in/out. state s maps letter -> 'in' | 'out' | null (null only during solving).
+function mkRuleIO(type,args,N,names){
+  const nm=x=>names[x]; const [A,B]=args; const k=args[0];
+  const countIn=s=>Object.keys(s).filter(l=>s[l]==='in').length;
+  const T={
+    requires:()=>({test:s=>s[A]!=='in'||s[B]==='in', txt:rnd([`If ${nm(A)} is in, then ${nm(B)} is in.`,`Whenever ${nm(A)} is in, so is ${nm(B)}.`])}),
+    requiresOut:()=>({test:s=>s[A]!=='out'||s[B]==='out', txt:rnd([`If ${nm(A)} is out, then ${nm(B)} is out.`,`${nm(B)} is out whenever ${nm(A)} is.`])}),
+    exclude:()=>({test:s=>!(s[A]==='in'&&s[B]==='in'), txt:rnd([`${nm(A)} and ${nm(B)} are not both in.`,`At most one of ${nm(A)} and ${nm(B)} is in.`])}),
+    atLeastOne:()=>({test:s=>s[A]==='in'||s[B]==='in', txt:rnd([`At least one of ${nm(A)} and ${nm(B)} is in.`,`${nm(A)} or ${nm(B)} (or both) is in.`])}),
+    biconditional:()=>({test:s=>(s[A]==='in')===(s[B]==='in'), txt:rnd([`${nm(A)} is in if and only if ${nm(B)} is in.`,`${nm(A)} and ${nm(B)} are both in or both out.`])}),
+    mustOut:()=>({test:s=>s[A]==='out', txt:rnd([`${nm(A)} is out.`,`${nm(A)} is not selected.`])}),
+    countExact:()=>({test:s=>countIn(s)===k, txt:rnd([`Exactly ${k} are in.`,`Exactly ${k} of the ${N} are selected.`])}),
+    countAtLeast:()=>({test:s=>countIn(s)>=k, txt:rnd([`At least ${k} are in.`,`No fewer than ${k} are selected.`])}),
+    countAtMost:()=>({test:s=>countIn(s)<=k, txt:rnd([`At most ${k} are in.`,`No more than ${k} are selected.`])}),
+  };
+  const base=T[type](); const key=type+':'+args.join(',');
+  const partial=(s)=>{
+    const ins=Object.keys(s).filter(l=>s[l]==='in').length;
+    const outs=Object.keys(s).filter(l=>s[l]==='out').length;
+    const unk=Object.keys(s).length-ins-outs; const a=s[A], b=s[B];
+    switch(type){
+      case 'requires': if(a==='in'&&b==='out')return 'bad'; if(a==='out'||(a==='in'&&b==='in'))return 'ok'; return 'pend';
+      case 'requiresOut': if(a==='out'&&b==='in')return 'bad'; if(a==='in'||(a==='out'&&b==='out'))return 'ok'; return 'pend';
+      case 'exclude': if(a==='in'&&b==='in')return 'bad'; if(a==='out'||b==='out')return 'ok'; return 'pend';
+      case 'atLeastOne': if(a==='out'&&b==='out')return 'bad'; if(a==='in'||b==='in')return 'ok'; return 'pend';
+      case 'biconditional': if(a&&b)return (a===b?'ok':'bad'); return 'pend';
+      case 'mustOut': return a==='out'?'ok':a==='in'?'bad':'pend';
+      case 'countExact': if(ins>k)return 'bad'; if(N-outs<k)return 'bad'; if(unk===0)return ins===k?'ok':'bad'; return 'pend';
+      case 'countAtLeast': if(ins>=k)return 'ok'; if(ins+unk<k)return 'bad'; return 'pend';
+      case 'countAtMost': if(ins>k)return 'bad'; if(ins+unk<=k)return 'ok'; return 'pend';
+    }
+  };
+  return {type,args,key,text:base.txt,test:base.test,partial};
+}
+function candidatePoolIO(letters,N,names){
+  const pool=[];
+  for(let k=2;k<=N-1;k++){ pool.push(mkRuleIO('countAtLeast',[k],N,names)); pool.push(mkRuleIO('countAtMost',[k],N,names)); }
+  for(const X of letters){ pool.push(mkRuleIO('mustOut',[X],N,names));
+    for(const Y of letters){ if(X===Y)continue;
+      pool.push(mkRuleIO('requires',[X,Y],N,names));
+      pool.push(mkRuleIO('requiresOut',[X,Y],N,names));
+      if(X<Y){ pool.push(mkRuleIO('exclude',[X,Y],N,names)); pool.push(mkRuleIO('atLeastOne',[X,Y],N,names)); pool.push(mkRuleIO('biconditional',[X,Y],N,names)); }
+    } }
+  return pool;
+}
+function allStates(letters){ const res=[],n=letters.length;
+  for(let mask=0;mask<(1<<n);mask++){ const s={}; letters.forEach((l,i)=>s[l]=(mask&(1<<i))?'in':'out'); res.push(s); }
+  return res; }
+let recentIO=[];
+function generateInOut(diff){
+  const N={easy:5,medium:6,hard:7}[diff];
+  const avail=INOUT_THEMES.filter(t=>!recentIO.includes(t)); const pickFrom=avail.length?avail:INOUT_THEMES;
+  for(let attempt=0;attempt<200;attempt++){
+    const theme=rnd(pickFrom);
+    const chosen=shuffle(theme.items.slice()).slice(0,N);
+    const letters=chosen.map(x=>x[0]); const names={}; chosen.forEach(x=>names[x[0]]=x[1]);
+    const cols=shuffle(COLORS.slice()); const palette={}; letters.forEach((l,i)=>palette[l]=cols[i%cols.length]);
+    const universe=allStates(letters);
+    const k=2+Math.floor(Math.random()*(N-2));               // exact "how many in" anchor (2..N-1)
+    const countRule=mkRuleIO('countExact',[k],N,names);
+    let sols=universe.filter(s=>countRule.test(s)); const rules=[countRule];
+    for(const cand of shuffle(candidatePoolIO(letters,N,names))){
+      if(rules.length>=7||sols.length===1)break;
+      const next=sols.filter(s=>cand.test(s));
+      if(next.length===0||next.length===sols.length)continue;   // never kill the puzzle / no-op
+      rules.push(cand); sols=next;
+    }
+    if(sols.length===1&&rules.length>=3){
+      recentIO.push(theme); while(recentIO.length>Math.min(4,INOUT_THEMES.length-1))recentIO.shift();
+      return {N,theme,letters,names,palette,rules,sols};
+    }
+  }
+  return null;
+}
+// quiz statements for in/out (concrete facts → clean must/cannot options)
+function stmtIO(type,args,names){ const nm=x=>names[x]; const [A,B]=args;
+  const T={
+    inX:()=>({test:s=>s[A]==='in', txt:`${nm(A)} is in.`}),
+    outX:()=>({test:s=>s[A]==='out', txt:`${nm(A)} is out.`}),
+    bothIn:()=>({test:s=>s[A]==='in'&&s[B]==='in', txt:`${nm(A)} and ${nm(B)} are both in.`}),
+    bothOut:()=>({test:s=>s[A]==='out'&&s[B]==='out', txt:`${nm(A)} and ${nm(B)} are both out.`}),
+    split:()=>({test:s=>s[A]==='in'&&s[B]==='out', txt:`${nm(A)} is in but ${nm(B)} is out.`}),
+  };
+  const b=T[type](); return {key:type+':'+args.join(','),text:b.txt,test:b.test};
+}
+function statementPoolIO(letters,names){ const s=[];
+  for(const X of letters){ s.push(stmtIO('inX',[X],names)); s.push(stmtIO('outX',[X],names));
+    for(const Y of letters){ if(X===Y)continue; s.push(stmtIO('split',[X,Y],names));
+      if(X<Y){ s.push(stmtIO('bothIn',[X,Y],names)); s.push(stmtIO('bothOut',[X,Y],names)); } } }
+  return s;
+}
+// difficulty-weighted family mix (explicit picker overrides). More exotic families climb with difficulty.
+function pickFamily(diff){
+  const sel=document.getElementById('fam').value;
+  if(sel==='sequencing'||sel==='inout')return sel;
+  const inoutP={easy:0.15,medium:0.4,hard:0.55}[diff];
+  return Math.random()<inoutP?'inout':'sequencing';
+}
+
 /* ---------- deduction quiz from the solution set ---------- */
 function statementPool(letters,N,names,slot){
   const s=[]; const push=(type,args)=>s.push(mkRule(type,args,N,names,slot));
@@ -278,7 +407,8 @@ function classify(st,sols){ const c=sols.filter(P=>st.test(P)).length;
   return c===0?'never':c===sols.length?'always':'some'; }
 function pick(arr,n,exclude){ const pool=arr.filter(x=>!exclude.includes(x)); shuffle(pool); return pool.slice(0,n); }
 function buildQuiz(G){
-  const {sols,letters,N,names,theme}=G; const pool=statementPool(letters,N,names,theme.slot);
+  const {sols,letters,N,names,theme}=G;
+  const pool = G.family==='inout' ? statementPoolIO(letters,names) : statementPool(letters,N,names,theme.slot);
   // dedupe by key
   const seen={}; const uniq=pool.filter(s=>seen[s.key]?false:(seen[s.key]=1));
   const always=[],never=[],some=[];
@@ -308,7 +438,7 @@ function buildQuiz(G){
     const subAlways=uniq.filter(s=>s.test&&sub.every(P=>s.test(P))&&!sols.every(P=>s.test(P)));
     const subSome=uniq.filter(s=>{const c=sub.filter(P=>s.test(P)).length;return c>0&&c<sub.length;});
     if(subAlways.length&&subSome.length>=3){ const ans=rnd(subAlways); const d=pick(subSome,3,[]);
-      qs.push(makeQ(`If ${lower(cond.text)} then which one of the following must be true?`,ans,d,
+      qs.push(makeQ(`If ${lower(cond.text).replace(/\.$/,'')}, then which one of the following must be true?`,ans,d,
         `Given that condition, only certain lineups remain — and all of them satisfy “${ans.text.replace(/\.$/,'')}.”`));
       break; }
   }
@@ -320,22 +450,30 @@ function makeQ(stem,ans,distractors,why){
 }
 
 /* ---------- state + render ---------- */
-let G=null, placement=[], sel=null;
-function newGame(){ G=generate(document.getElementById('diff').value);
+let G=null, placement=[], assign={}, sel=null;
+function newGame(){ const diff=document.getElementById('diff').value; const fam=pickFamily(diff);
+  G = fam==='inout' ? generateInOut(diff) : generate(diff);
   if(!G){ alert('Generator hiccup — tap New Game again.'); return; }
-  placement=Array(G.N).fill(null); sel=null;
-  document.getElementById('setup').innerHTML =
-    `${G.theme.story(G.N)} — one at each of ${G.N} ${G.theme.slot}s numbered <b>1–${G.N}</b>, left to right. `+
-    `Place all ${G.N} so every rule holds. Items: `+G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+  G.family=fam; sel=null;
+  if(fam==='inout'){ assign={};
+    document.getElementById('setup').innerHTML =
+      `${G.theme.story(G.N)}. Sort all ${G.N} into <b>${G.theme.inLabel}</b> or <b>${G.theme.outLabel}</b> so every rule holds. Items: `+
+      G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+  } else { placement=Array(G.N).fill(null);
+    document.getElementById('setup').innerHTML =
+      `${G.theme.story(G.N)} — one at each of ${G.N} ${G.theme.slot}s numbered <b>1–${G.N}</b>, left to right. `+
+      `Place all ${G.N} so every rule holds. Items: `+G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+  }
   document.getElementById('solpill').textContent = G.sols.length===1?'Unique solution':(G.sols.length+' solutions');
   document.getElementById('tapHint').textContent = defaultHint();
   document.getElementById('banner').classList.remove('show');
-  document.getElementById('stations').style.gridTemplateColumns=`repeat(${G.N},1fr)`;
-  document.getElementById('tray').style.gridTemplateColumns=`repeat(${G.N},1fr)`;
   G.quiz=buildQuiz(G);
   render(); renderQuiz();
 }
 function curPos(){const p={};G.letters.forEach(l=>p[l]=null);placement.forEach((l,i)=>{if(l)p[l]=i+1;});return p;}
+function curStateIO(){const m={};G.letters.forEach(l=>m[l]=assign[l]||null);return m;}
+function curState(){return G.family==='inout'?curStateIO():curPos();}
+function allPlaced(){return G.family==='inout'?G.letters.every(l=>assign[l]):!placement.includes(null);}
 // sel = null | {letter, at}  where at = station index (0-based) or -1 for the tray.
 // Tap-to-move and drag-and-drop share one mover: applyMove(from,to).
 let dragData=null;
@@ -349,8 +487,10 @@ function dropTarget(el,to){         // to = station index | 'tray'
   el.ondragleave=()=>el.classList.remove('dragover');
   el.ondrop=e=>{ e.preventDefault(); el.classList.remove('dragover'); if(dragData){ const d=dragData; dragData=null; applyMove(d,to); } };
 }
-function render(){
-  const st=document.getElementById('stations');st.innerHTML='';
+function render(){ if(!G)return; return G.family==='inout'?renderIO():renderSeq(); }
+function renderSeq(){
+  const st=document.getElementById('stations');
+  st.style.display='grid'; st.style.gridTemplateColumns=`repeat(${G.N},1fr)`; st.style.gap='6px'; st.innerHTML='';
   for(let i=0;i<G.N;i++){
     const occupied=placement[i]; const isSelHere = sel && sel.at===i;
     const cell=document.createElement('div');
@@ -361,7 +501,8 @@ function render(){
     dropTarget(cell,i);
     st.appendChild(cell);
   }
-  const tray=document.getElementById('tray');tray.innerHTML='';
+  const tray=document.getElementById('tray');
+  tray.style.display='grid'; tray.style.gridTemplateColumns=`repeat(${G.N},1fr)`; tray.style.flexWrap=''; tray.innerHTML='';
   G.letters.forEach(l=>{const slot=document.createElement('div');slot.className='slot';
     if(!placement.includes(l)){ const selc = sel && sel.at===-1 && sel.letter===l;
       const t=tile(l,selc); wireDrag(t,l,-1);
@@ -370,7 +511,30 @@ function render(){
   dropTarget(tray,'tray');   // drag a placed piece here to remove it
   renderRules();
 }
+function renderIO(){
+  const st=document.getElementById('stations');
+  st.style.display='grid'; st.style.gridTemplateColumns='1fr 1fr'; st.style.gap='10px'; st.innerHTML='';
+  [['in',G.theme.inLabel],['out',G.theme.outLabel]].forEach(([zone,label])=>{
+    const b=document.createElement('div'); b.className='bin'+((sel&&sel.at!==zone)?' armed':'');
+    const members=G.letters.filter(l=>assign[l]===zone);
+    const h=document.createElement('h3'); h.innerHTML=`<span>${label}</span><span class="c">${members.length}</span>`; b.appendChild(h);
+    const items=document.createElement('div'); items.className='items';
+    members.forEach(l=>{ const selc=sel&&sel.at===zone&&sel.letter===l;
+      const t=tile(l,selc,true); wireDrag(t,l,zone);
+      t.onclick=e=>{ e.stopPropagation(); sel=selc?null:{letter:l,at:zone}; render(); }; items.appendChild(t); });
+    b.appendChild(items); b.onclick=()=>clickZone(zone); dropTarget(b,zone); st.appendChild(b);
+  });
+  const tray=document.getElementById('tray');
+  tray.style.display='flex'; tray.style.flexWrap='wrap'; tray.style.gap='8px'; tray.style.gridTemplateColumns=''; tray.innerHTML='';
+  G.letters.filter(l=>!assign[l]).forEach(l=>{ const selc=sel&&sel.at==='tray'&&sel.letter===l;
+    const t=tile(l,selc,true); wireDrag(t,l,'tray');
+    t.onclick=e=>{ e.stopPropagation(); sel=selc?null:{letter:l,at:'tray'}; render(); }; tray.appendChild(t); });
+  dropTarget(tray,'tray');
+  renderRules();
+}
+function clickZone(zone){ if(sel){ if(sel.at===zone){sel=null;render();return;} applyMove(sel,zone); } }
 function applyMove(from,to){
+  if(G.family==='inout'){ if(to==='tray') delete assign[from.letter]; else assign[from.letter]=to; sel=null; render(); banner(solved()); return; }
   if(to==='tray'){ if(from.at>=0) placement[from.at]=null; }
   else if(from.at!==to){ const occ=placement[to]; if(from.at>=0) placement[from.at]=occ; placement[to]=from.letter; }
   sel=null; render(); banner(solved());
@@ -381,21 +545,22 @@ function clickCell(i){
   if(sel.at===i){ applyMove(sel,'tray'); return; }                           // click its own cell → back to tray
   applyMove(sel,i);                                                          // move / swap
 }
-function tile(l,selc){const t=document.createElement('div');t.className='tile'+(selc?' sel':'');
+function tile(l,selc,fixed){const t=document.createElement('div');t.className='tile'+(selc?' sel':'')+(fixed?' fixed':'');
   t.style.background=(G.palette&&G.palette[l])||'#88c'; t.textContent=l; t.title=G.names[l]; return t;}
-function renderRules(){const pos=curPos();const box=document.getElementById('rules');box.innerHTML='';
-  G.rules.forEach(r=>{const s=r.partial(pos);const row=document.createElement('div');row.className='rule'+(s==='bad'?' bad':'');
+function renderRules(){const S=curState();const box=document.getElementById('rules');box.innerHTML='';
+  G.rules.forEach(r=>{const s=r.partial(S);const row=document.createElement('div');row.className='rule'+(s==='bad'?' bad':'');
     row.innerHTML='<span class="dot '+(s==='ok'?'ok':s==='bad'?'bad':'')+'">'+(s==='ok'?'✓':s==='bad'?'✕':'')+'</span><span class="rtext">'+r.text+'</span>';
     box.appendChild(row);});}
-function solved(){ if(placement.includes(null))return false; const P=curPos(); return G.rules.every(r=>r.test(P)); }
+function solved(){ if(!allPlaced())return false; const S=curState(); return G.rules.every(r=>r.test(S)); }
 function banner(v){document.getElementById('banner').classList.toggle('show',v);}
-function check(){ if(placement.includes(null)){hint('Place all '+G.N+' items first.');return;}
-  if(solved())banner(true); else {banner(false);const pos=curPos();const b=G.rules.filter(r=>r.partial(pos)==='bad').length;
+function check(){ if(!allPlaced()){hint('Place all '+G.N+' items first.');return;}
+  if(solved())banner(true); else {banner(false);const S=curState();const b=G.rules.filter(r=>r.partial(S)==='bad').length;
     hint(b+' rule'+(b!==1?'s':'')+' still broken — see red.');}}
-function defaultHint(){return '— tap an item, then a '+(G?G.theme.slot:'slot');}
+function defaultHint(){ if(!G)return '— tap an item, then a spot';
+  return G.family==='inout' ? '— tap an item, then '+G.theme.inLabel+' or '+G.theme.outLabel : '— tap an item, then a '+G.theme.slot; }
 function hint(m){const h=document.getElementById('tapHint');h.textContent='— '+m;
   setTimeout(()=>h.textContent=defaultHint(),2600);}
-function reset(){placement=Array(G.N).fill(null);sel=null;banner(false);render();}
+function reset(){ if(G.family==='inout')assign={}; else placement=Array(G.N).fill(null); sel=null;banner(false);render();}
 function renderQuiz(){const box=document.getElementById('quiz');box.innerHTML='';
   if(!G.quiz.length){box.innerHTML='<div class="foot" style="margin:0;text-align:left">This board’s solution set was too tight for clean questions — tap New Game for one with deductions.</div>';return;}
   G.quiz.forEach((q,qi)=>{const d=document.createElement('div');d.className='q';
