@@ -78,6 +78,7 @@ button:active{transform:scale(.98)}
       <option value="random" selected>Random type</option>
       <option value="sequencing">Ordering</option>
       <option value="inout">In / Out</option>
+      <option value="grouping">Grouping</option>
     </select>
     <select id="diff" onchange="newGame()">
       <option value="easy">Easy · 5</option>
@@ -388,12 +389,114 @@ function statementPoolIO(letters,names){ const s=[];
       if(X<Y){ s.push(stmtIO('bothIn',[X,Y],names)); s.push(stmtIO('bothOut',[X,Y],names)); } } }
   return s;
 }
+/* ================= FAMILY: Grouping / Distribution ================= */
+const GROUP_THEMES=[
+  {story:n=>`${n} interns are assigned to 3 departments`, unit:'department', groups:['Sales','Design','Ops'],
+   items:[['A','Ames'],['B','Boyd'],['C','Cole'],['D','Diaz'],['E','Estes'],['F','Ford'],['G','Gill']]},
+  {story:n=>`${n} books are sorted onto 3 shelves`, unit:'shelf', up:'shelves', groups:['Top','Middle','Bottom'],
+   items:[['A','Ash'],['B','Bloom'],['C','Cove'],['D','Dune'],['E','Ember'],['F','Frost'],['H','Haven']]},
+  {story:n=>`${n} students split into 3 study groups`, unit:'group', groups:['Red','Blue','Green'],
+   items:[['A','Ada'],['B','Ben'],['C','Cara'],['D','Devi'],['E','Eli'],['F','Faye'],['G','Gus']]},
+  {story:n=>`${n} dogs are placed in 3 play yards`, unit:'yard', groups:['North','East','West'],
+   items:[['B','Bo'],['C','Cocoa'],['D','Duke'],['M','Max'],['P','Pip'],['R','Rex'],['Z','Ziggy']]},
+  {story:n=>`${n} packages go onto 3 delivery trucks`, unit:'truck', groups:['Truck 1','Truck 2','Truck 3'],
+   items:[['A','Avon'],['B','Byrd'],['C','Crane'],['D','Dole'],['E','Ellis'],['F','Frey'],['G','Gantt']]},
+  {story:n=>`${n} wines are stored in 3 crates`, unit:'crate', groups:['Oak','Cedar','Pine'],
+   items:[['B','Barolo'],['C','Chianti'],['M','Merlot'],['P','Pinot'],['R','Rioja'],['S','Syrah'],['V','Verdejo']]},
+];
+// state s: letter -> 'g0'|'g1'|... | null. Board rule for grouping.
+function mkRuleGroup(type,args,N,names,meta,nG){
+  const nm=x=>names[x]; const cnt=(s,i)=>Object.keys(s).filter(l=>s[l]==='g'+i).length;
+  const T={
+    sameGroup:()=>({test:s=>s[args[0]]===s[args[1]], txt:rnd([`${nm(args[0])} and ${nm(args[1])} are in the same ${meta.unit}.`,`${nm(args[0])} shares a ${meta.unit} with ${nm(args[1])}.`])}),
+    diffGroup:()=>({test:s=>s[args[0]]!==s[args[1]], txt:rnd([`${nm(args[0])} and ${nm(args[1])} are in different ${meta.up}.`,`${nm(args[0])} and ${nm(args[1])} are not in the same ${meta.unit}.`])}),
+    notInGroup:()=>({test:s=>s[args[0]]!=='g'+args[1], txt:`${nm(args[0])} is not in ${meta.gname(args[1])}.`}),
+    inGroup:()=>({test:s=>s[args[0]]==='g'+args[1], txt:`${nm(args[0])} is in ${meta.gname(args[1])}.`}),
+    sizeExact:()=>({test:s=>cnt(s,args[0])===args[1], txt:`${meta.gname(args[0])} has exactly ${args[1]} ${args[1]===1?'member':'members'}.`}),
+    sizeAtLeast:()=>({test:s=>cnt(s,args[0])>=args[1], txt:`${meta.gname(args[0])} has at least ${args[1]} members.`}),
+    sizeAtMost:()=>({test:s=>cnt(s,args[0])<=args[1], txt:`${meta.gname(args[0])} has at most ${args[1]} members.`}),
+    condGroup:()=>({test:s=>s[args[0]]!=='g'+args[1]||s[args[2]]==='g'+args[3], txt:`If ${nm(args[0])} is in ${meta.gname(args[1])}, then ${nm(args[2])} is in ${meta.gname(args[3])}.`}),
+    allNonEmpty:()=>({test:s=>{for(let i=0;i<nG;i++)if(cnt(s,i)===0)return false;return true;}, txt:`Every ${meta.unit} has at least one member.`}),
+  };
+  const base=T[type](); const key=type+':'+args.join(',');
+  const partial=(s)=>{ const keys=Object.keys(s); const unk=keys.filter(l=>!s[l]).length;
+    const cg=i=>keys.filter(l=>s[l]==='g'+i).length;
+    switch(type){
+      case 'sameGroup':{const a=s[args[0]],b=s[args[1]];return (a&&b)?(a===b?'ok':'bad'):'pend';}
+      case 'diffGroup':{const a=s[args[0]],b=s[args[1]];return (a&&b)?(a!==b?'ok':'bad'):'pend';}
+      case 'notInGroup':{const a=s[args[0]];return a?(a==='g'+args[1]?'bad':'ok'):'pend';}
+      case 'inGroup':{const a=s[args[0]];return a?(a==='g'+args[1]?'ok':'bad'):'pend';}
+      case 'sizeExact':{const k=args[1],inG=cg(args[0]);if(inG>k)return 'bad';if(inG+unk<k)return 'bad';if(unk===0)return inG===k?'ok':'bad';return 'pend';}
+      case 'sizeAtLeast':{const k=args[1],inG=cg(args[0]);if(inG>=k)return 'ok';if(inG+unk<k)return 'bad';return 'pend';}
+      case 'sizeAtMost':{const k=args[1],inG=cg(args[0]);if(inG>k)return 'bad';if(inG+unk<=k)return 'ok';return 'pend';}
+      case 'condGroup':{const a=s[args[0]],b=s[args[2]],gi='g'+args[1],gj='g'+args[3];
+        if(a&&a!==gi)return 'ok'; if(a===gi){if(b===gj)return 'ok';if(b&&b!==gj)return 'bad';return 'pend';} return 'pend';}
+      case 'allNonEmpty':{let empties=0;for(let i=0;i<nG;i++)if(cg(i)===0)empties++; if(empties===0)return 'ok'; if(empties>unk)return 'bad'; return 'pend';}
+    }
+  };
+  return {type,args,key,text:base.txt,test:base.test,partial};
+}
+function candidatePoolGroupMembership(letters,N,names,meta,nG){   // membership clues only — sizes come from the anchor
+  const pool=[];
+  for(let i=0;i<nG;i++) for(const A of letters) pool.push(mkRuleGroup('notInGroup',[A,i],N,names,meta,nG));
+  for(const A of letters) for(const B of letters){ if(A<B){ pool.push(mkRuleGroup('sameGroup',[A,B],N,names,meta,nG)); pool.push(mkRuleGroup('diffGroup',[A,B],N,names,meta,nG)); } }
+  return pool;
+}
+let recentGroup=[];
+function generateGroup(diff){
+  const N={easy:5,medium:6,hard:7}[diff]; const nG=3;
+  const avail=GROUP_THEMES.filter(t=>!recentGroup.includes(t)); const pickFrom=avail.length?avail:GROUP_THEMES;
+  const theme=rnd(pickFrom);
+  const chosen=shuffle(theme.items.slice()).slice(0,N);
+  const letters=chosen.map(x=>x[0]); const names={}; chosen.forEach(x=>names[x[0]]=x[1]);
+  const cols=shuffle(COLORS.slice()); const palette={}; letters.forEach((l,i)=>palette[l]=cols[i%cols.length]);
+  const meta={unit:theme.unit, up:theme.up||theme.unit+'s', gname:i=>theme.groups[i], count:nG};
+  const total=Math.pow(nG,N); const universe=[];
+  for(let code=0;code<total;code++){ const s={}; let c=code; for(let i=0;i<N;i++){ s[letters[i]]='g'+(c%nG); c=Math.floor(c/nG); } universe.push(s); }
+  for(let attempt=0;attempt<120;attempt++){
+    // random distribution: each group >=1, sizes sum to N (varies 2-2-1, 3-2-2, ... not always X-1-1)
+    const sizes=Array(nG).fill(1); for(let rem=N-nG; rem>0; rem--) sizes[Math.floor(Math.random()*nG)]++;
+    const order=shuffle([0,1,2]); const reveal=order.slice(0,2);            // reveal 2 group sizes; 3rd is deducible from the total
+    const anchor=reveal.map(i=>mkRuleGroup('sizeExact',[i,sizes[i]],N,names,meta,nG));
+    let sols=universe.filter(s=>anchor.every(r=>r.test(s))); if(sols.length<2)continue;
+    const rules=anchor.slice();
+    const memPool=shuffle(candidatePoolGroupMembership(letters,N,names,meta,nG));
+    while(sols.length>1 && rules.length<9){                                  // max-reduction: pins any distribution in few clues
+      let best=null,bestLen=sols.length;
+      for(const cand of memPool){ if(rules.indexOf(cand)>=0)continue;
+        const len=sols.filter(s=>cand.test(s)).length;
+        if(len>0 && len<bestLen){ bestLen=len; best=cand; if(len===1)break; } }
+      if(!best)break; rules.push(best); sols=sols.filter(s=>best.test(s));
+    }
+    if(sols.length===1&&rules.length>=3){
+      recentGroup.push(theme); while(recentGroup.length>Math.min(4,GROUP_THEMES.length-1))recentGroup.shift();
+      return {N,theme,letters,names,palette,rules:shuffle(rules),sols,meta,groupNames:theme.groups.slice(0,nG)};
+    }
+  }
+  return null;
+}
+function stmtGroup(type,args,names,meta){ const nm=x=>names[x];
+  const T={
+    inG:()=>({test:s=>s[args[0]]==='g'+args[1], txt:`${nm(args[0])} is in ${meta.gname(args[1])}.`}),
+    same:()=>({test:s=>s[args[0]]===s[args[1]], txt:`${nm(args[0])} and ${nm(args[1])} are in the same ${meta.unit}.`}),
+    diff:()=>({test:s=>s[args[0]]!==s[args[1]], txt:`${nm(args[0])} and ${nm(args[1])} are in different ${meta.up}.`}),
+  };
+  const b=T[type](); return {key:type+':'+args.join(','),text:b.txt,test:b.test};
+}
+function statementPoolGroup(letters,names,meta){ const s=[];
+  for(const X of letters){ for(let i=0;i<meta.count;i++) s.push(stmtGroup('inG',[X,i],names,meta));
+    for(const Y of letters){ if(X<Y){ s.push(stmtGroup('same',[X,Y],names,meta)); s.push(stmtGroup('diff',[X,Y],names,meta)); } } }
+  return s;
+}
+
 // difficulty-weighted family mix (explicit picker overrides). More exotic families climb with difficulty.
 function pickFamily(diff){
   const sel=document.getElementById('fam').value;
-  if(sel==='sequencing'||sel==='inout')return sel;
-  const inoutP={easy:0.15,medium:0.4,hard:0.55}[diff];
-  return Math.random()<inoutP?'inout':'sequencing';
+  if(sel!=='random')return sel;
+  const w={easy:{sequencing:0.80,inout:0.15,grouping:0.05},
+           medium:{sequencing:0.50,inout:0.30,grouping:0.20},
+           hard:{sequencing:0.35,inout:0.30,grouping:0.35}}[diff];
+  let r=Math.random(),acc=0; for(const f of ['sequencing','inout','grouping']){ acc+=w[f]; if(r<acc)return f; } return 'sequencing';
 }
 
 /* ---------- deduction quiz from the solution set ---------- */
@@ -408,7 +511,9 @@ function classify(st,sols){ const c=sols.filter(P=>st.test(P)).length;
 function pick(arr,n,exclude){ const pool=arr.filter(x=>!exclude.includes(x)); shuffle(pool); return pool.slice(0,n); }
 function buildQuiz(G){
   const {sols,letters,N,names,theme}=G;
-  const pool = G.family==='inout' ? statementPoolIO(letters,names) : statementPool(letters,N,names,theme.slot);
+  const pool = G.family==='sequencing' ? statementPool(letters,N,names,theme.slot)
+             : G.family==='inout' ? statementPoolIO(letters,names)
+             : statementPoolGroup(letters,names,G.meta);
   // dedupe by key
   const seen={}; const uniq=pool.filter(s=>seen[s.key]?false:(seen[s.key]=1));
   const always=[],never=[],some=[];
@@ -452,17 +557,23 @@ function makeQ(stem,ans,distractors,why){
 /* ---------- state + render ---------- */
 let G=null, placement=[], assign={}, sel=null;
 function newGame(){ const diff=document.getElementById('diff').value; const fam=pickFamily(diff);
-  G = fam==='inout' ? generateInOut(diff) : generate(diff);
+  G = fam==='inout' ? generateInOut(diff) : fam==='grouping' ? generateGroup(diff) : generate(diff);
   if(!G){ alert('Generator hiccup — tap New Game again.'); return; }
   G.family=fam; sel=null;
-  if(fam==='inout'){ assign={};
-    document.getElementById('setup').innerHTML =
-      `${G.theme.story(G.N)}. Sort all ${G.N} into <b>${G.theme.inLabel}</b> or <b>${G.theme.outLabel}</b> so every rule holds. Items: `+
-      G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
-  } else { placement=Array(G.N).fill(null);
+  if(fam==='sequencing'){ placement=Array(G.N).fill(null);
     document.getElementById('setup').innerHTML =
       `${G.theme.story(G.N)} — one at each of ${G.N} ${G.theme.slot}s numbered <b>1–${G.N}</b>, left to right. `+
       `Place all ${G.N} so every rule holds. Items: `+G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+  } else { assign={};
+    if(fam==='inout'){ G.zones=[{id:'in',label:G.theme.inLabel},{id:'out',label:G.theme.outLabel}];
+      document.getElementById('setup').innerHTML =
+        `${G.theme.story(G.N)}. Sort all ${G.N} into <b>${G.theme.inLabel}</b> or <b>${G.theme.outLabel}</b> so every rule holds. Items: `+
+        G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+    } else { G.zones=G.groupNames.map((name,i)=>({id:'g'+i,label:name}));
+      document.getElementById('setup').innerHTML =
+        `${G.theme.story(G.N)}. Put each of the ${G.N} into one ${G.meta.unit} — <b>${G.groupNames.join('</b>, <b>')}</b> — so every rule holds. Items: `+
+        G.letters.map(l=>`<b>${G.names[l]}</b>`).join(', ')+'.';
+    }
   }
   document.getElementById('solpill').textContent = G.sols.length===1?'Unique solution':(G.sols.length+' solutions');
   document.getElementById('tapHint').textContent = defaultHint();
@@ -471,9 +582,9 @@ function newGame(){ const diff=document.getElementById('diff').value; const fam=
   render(); renderQuiz();
 }
 function curPos(){const p={};G.letters.forEach(l=>p[l]=null);placement.forEach((l,i)=>{if(l)p[l]=i+1;});return p;}
-function curStateIO(){const m={};G.letters.forEach(l=>m[l]=assign[l]||null);return m;}
-function curState(){return G.family==='inout'?curStateIO():curPos();}
-function allPlaced(){return G.family==='inout'?G.letters.every(l=>assign[l]):!placement.includes(null);}
+function curAssign(){const m={};G.letters.forEach(l=>m[l]=assign[l]||null);return m;}
+function curState(){return G.family==='sequencing'?curPos():curAssign();}
+function allPlaced(){return G.family==='sequencing'?!placement.includes(null):G.letters.every(l=>assign[l]);}
 // sel = null | {letter, at}  where at = station index (0-based) or -1 for the tray.
 // Tap-to-move and drag-and-drop share one mover: applyMove(from,to).
 let dragData=null;
@@ -487,7 +598,7 @@ function dropTarget(el,to){         // to = station index | 'tray'
   el.ondragleave=()=>el.classList.remove('dragover');
   el.ondrop=e=>{ e.preventDefault(); el.classList.remove('dragover'); if(dragData){ const d=dragData; dragData=null; applyMove(d,to); } };
 }
-function render(){ if(!G)return; return G.family==='inout'?renderIO():renderSeq(); }
+function render(){ if(!G)return; return G.family==='sequencing'?renderSeq():renderBins(); }
 function renderSeq(){
   const st=document.getElementById('stations');
   st.style.display='grid'; st.style.gridTemplateColumns=`repeat(${G.N},1fr)`; st.style.gap='6px'; st.innerHTML='';
@@ -511,10 +622,10 @@ function renderSeq(){
   dropTarget(tray,'tray');   // drag a placed piece here to remove it
   renderRules();
 }
-function renderIO(){
+function renderBins(){
   const st=document.getElementById('stations');
-  st.style.display='grid'; st.style.gridTemplateColumns='1fr 1fr'; st.style.gap='10px'; st.innerHTML='';
-  [['in',G.theme.inLabel],['out',G.theme.outLabel]].forEach(([zone,label])=>{
+  st.style.display='grid'; st.style.gridTemplateColumns=`repeat(${G.zones.length},1fr)`; st.style.gap='10px'; st.innerHTML='';
+  G.zones.forEach(({id:zone,label})=>{
     const b=document.createElement('div'); b.className='bin'+((sel&&sel.at!==zone)?' armed':'');
     const members=G.letters.filter(l=>assign[l]===zone);
     const h=document.createElement('h3'); h.innerHTML=`<span>${label}</span><span class="c">${members.length}</span>`; b.appendChild(h);
@@ -534,7 +645,7 @@ function renderIO(){
 }
 function clickZone(zone){ if(sel){ if(sel.at===zone){sel=null;render();return;} applyMove(sel,zone); } }
 function applyMove(from,to){
-  if(G.family==='inout'){ if(to==='tray') delete assign[from.letter]; else assign[from.letter]=to; sel=null; render(); banner(solved()); return; }
+  if(G.family!=='sequencing'){ if(to==='tray') delete assign[from.letter]; else assign[from.letter]=to; sel=null; render(); banner(solved()); return; }
   if(to==='tray'){ if(from.at>=0) placement[from.at]=null; }
   else if(from.at!==to){ const occ=placement[to]; if(from.at>=0) placement[from.at]=occ; placement[to]=from.letter; }
   sel=null; render(); banner(solved());
@@ -557,10 +668,12 @@ function check(){ if(!allPlaced()){hint('Place all '+G.N+' items first.');return
   if(solved())banner(true); else {banner(false);const S=curState();const b=G.rules.filter(r=>r.partial(S)==='bad').length;
     hint(b+' rule'+(b!==1?'s':'')+' still broken — see red.');}}
 function defaultHint(){ if(!G)return '— tap an item, then a spot';
-  return G.family==='inout' ? '— tap an item, then '+G.theme.inLabel+' or '+G.theme.outLabel : '— tap an item, then a '+G.theme.slot; }
+  if(G.family==='sequencing')return '— tap an item, then a '+G.theme.slot;
+  if(G.family==='inout')return '— tap an item, then '+G.theme.inLabel+' or '+G.theme.outLabel;
+  return '— tap an item, then a '+G.meta.unit; }
 function hint(m){const h=document.getElementById('tapHint');h.textContent='— '+m;
   setTimeout(()=>h.textContent=defaultHint(),2600);}
-function reset(){ if(G.family==='inout')assign={}; else placement=Array(G.N).fill(null); sel=null;banner(false);render();}
+function reset(){ if(G.family==='sequencing')placement=Array(G.N).fill(null); else assign={}; sel=null;banner(false);render();}
 function renderQuiz(){const box=document.getElementById('quiz');box.innerHTML='';
   if(!G.quiz.length){box.innerHTML='<div class="foot" style="margin:0;text-align:left">This board’s solution set was too tight for clean questions — tap New Game for one with deductions.</div>';return;}
   G.quiz.forEach((q,qi)=>{const d=document.createElement('div');d.className='q';
