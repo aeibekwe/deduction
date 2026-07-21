@@ -333,7 +333,7 @@ function mkRuleIO(type,args,N,names){
   const countIn=s=>Object.keys(s).filter(l=>s[l]==='in').length;
   const T={
     requires:()=>({test:s=>s[A]!=='in'||s[B]==='in', txt:rnd([`If ${nm(A)} is in, then ${nm(B)} is in.`,`Whenever ${nm(A)} is in, so is ${nm(B)}.`])}),
-    requiresOut:()=>({test:s=>s[A]!=='out'||s[B]==='out', txt:rnd([`If ${nm(A)} is out, then ${nm(B)} is out.`,`${nm(B)} is out whenever ${nm(A)} is.`])}),
+    requiresOut:()=>({test:s=>s[A]!=='out'||s[B]==='out', txt:rnd([`If ${nm(A)} is out, then ${nm(B)} is out.`,`${nm(B)} is out whenever ${nm(A)} is out.`])}),
     exclude:()=>({test:s=>!(s[A]==='in'&&s[B]==='in'), txt:rnd([`${nm(A)} and ${nm(B)} are not both in.`,`At most one of ${nm(A)} and ${nm(B)} is in.`])}),
     atLeastOne:()=>({test:s=>s[A]==='in'||s[B]==='in', txt:rnd([`At least one of ${nm(A)} and ${nm(B)} is in.`,`${nm(A)} or ${nm(B)} (or both) is in.`])}),
     biconditional:()=>({test:s=>(s[A]==='in')===(s[B]==='in'), txt:rnd([`${nm(A)} is in if and only if ${nm(B)} is in.`,`${nm(A)} and ${nm(B)} are both in or both out.`])}),
