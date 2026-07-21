@@ -90,6 +90,7 @@ button:active{transform:scale(.98)}
 @keyframes pop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
 .q{margin-bottom:16px}.q .stem{font-size:.9rem;font-weight:600;margin-bottom:8px;line-height:1.4}
 .opt{display:block;width:100%;text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:7px;font-size:.86rem;cursor:pointer;color:var(--text)}
+.opt.sel{background:rgba(10,132,255,.16);border-color:var(--blue)}
 .opt.correct{background:rgba(48,209,88,.16);border-color:var(--green)}.opt.wrong{background:rgba(255,69,58,.16);border-color:var(--red)}
 .expl{font-size:.8rem;color:var(--dim);margin-top:4px;display:none;line-height:1.45}.expl.show{display:block}
 .foot{color:var(--dim);font-size:.72rem;text-align:center;margin-top:26px;line-height:1.5}
@@ -780,24 +781,40 @@ function newDeduction(diff){
 function renderRulesStatic(){ const box=document.getElementById('rules'); box.innerHTML='';
   G.rules.forEach(r=>{ const row=document.createElement('div'); row.className='rule';
     row.innerHTML='<span class="dot">•</span><span class="rtext">'+r.text+'</span>'; box.appendChild(row); }); }
-function renderDeductionQuiz(){ const box=document.getElementById('quiz'); box.innerHTML='';
+let dedSel={};   // question index -> chosen option index (feedback gated until Check, like the board)
+function renderDeductionQuiz(){ const box=document.getElementById('quiz'); box.innerHTML=''; dedSel={};
   if(!G.quiz.length){ box.innerHTML='<div class="foot" style="margin:0;text-align:left">Couldn’t derive clean questions for this one — tap New Game.</div>'; return; }
-  let score=0, done=0; const total=G.quiz.length;
-  const head=document.createElement('div'); head.className='stem'; head.style.marginBottom='12px';
-  head.textContent=`Score: 0 / ${total}`; box.appendChild(head);
   G.quiz.forEach((q,qi)=>{ const d=document.createElement('div'); d.className='q';
     d.innerHTML='<div class="stem">'+(qi+1)+'. '+q.stem+'</div>';
     q.opts.forEach((o,oi)=>{ const b=document.createElement('button'); b.className='opt';
       b.textContent=String.fromCharCode(65+oi)+') '+o.text;
-      b.onclick=()=>{ d.querySelectorAll('.opt').forEach(x=>x.style.pointerEvents='none');
-        const right=oi===q.ansIdx; b.classList.add(right?'correct':'wrong');
-        if(!right) d.querySelectorAll('.opt')[q.ansIdx].classList.add('correct');
-        d.querySelector('.expl').classList.add('show');
-        done++; if(right) score++; head.textContent=`Score: ${score} / ${total}`+(done===total?'  ✓ complete':''); };
+      b.onclick=()=>{ if(d.classList.contains('checked'))return;   // locked after Check
+        dedSel[qi]=oi; d.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); };
       d.appendChild(b); });
     const e=document.createElement('div'); e.className='expl'; e.textContent='➛ '+q.why; d.appendChild(e);
     box.appendChild(d); });
+  const bar=document.createElement('div'); bar.className='bar';
+  bar.innerHTML='<button onclick="resetDeductions()">Reset</button><button class="primary" onclick="checkDeductions()">Check</button>';
+  box.appendChild(bar);
+  const res=document.createElement('div'); res.id='dedresult'; res.className='stem';
+  res.style.marginTop='14px'; res.style.textAlign='center'; res.style.display='none'; box.appendChild(res);
 }
+function checkDeductions(){ const total=G.quiz.length; const res=document.getElementById('dedresult');
+  const answered=Object.keys(dedSel).length;
+  if(answered<total){ res.style.display='block'; res.style.color='var(--dim)';
+    res.textContent=`Answer all ${total} first — ${total-answered} to go.`; return; }
+  let score=0;
+  document.querySelectorAll('#quiz .q').forEach((d,qi)=>{ const q=G.quiz[qi]; const sel=dedSel[qi];
+    d.classList.add('checked'); const opts=d.querySelectorAll('.opt');
+    opts.forEach(x=>x.style.pointerEvents='none');
+    const right=sel===q.ansIdx; if(right)score++;
+    opts[sel].classList.remove('sel'); opts[sel].classList.add(right?'correct':'wrong');
+    if(!right) opts[q.ansIdx].classList.add('correct');
+    d.querySelector('.expl').classList.add('show'); });
+  res.style.display='block'; res.style.color=score===total?'var(--green)':'var(--text)';
+  res.textContent=`Score: ${score} / ${total}`+(score===total?'  ✓ perfect':'');
+}
+function resetDeductions(){ renderDeductionQuiz(); }
 
 /* ---------- state + render ---------- */
 let G=null, placement=[], assign={}, mAssign={a:{},b:{}}, sel=null, revealed=false;   // revealed: rule pass/fail only shown after Check
